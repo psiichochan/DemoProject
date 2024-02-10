@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import React, {useEffect} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createStackNavigator} from '@react-navigation/stack';
@@ -5,6 +6,7 @@ import Images from './component/Images';
 import Videos from './component/Videos';
 import UsbDetection from './component/UsbDetection';
 import {NativeModules, ToastAndroid} from 'react-native';
+import ScrollingText from './component/ScrollingText';
 
 const Stack = createStackNavigator();
 const usbDetectionModule = NativeModules.UsbDetectionModule;
@@ -47,6 +49,11 @@ const App = () => {
         <Stack.Screen
           name="Images"
           component={Images}
+          options={{headerShown: false}}
+        />
+        <Stack.Screen
+          name="ScrollingText"
+          component={ScrollingText}
           options={{headerShown: false}}
         />
         <Stack.Screen

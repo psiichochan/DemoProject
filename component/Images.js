@@ -25,7 +25,7 @@ const Images = ({navigation}) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [intervalTime, setIntervalTime] = useState('5');
   const [permissionsGranted, setPermissionGranted] = useState(false);
-  const [imagesFound, setImagesFound] = useState(true);
+  const [imagesFound, setImagesFound] = useState(false);
 
   const intervalIdRef = useRef(null);
 
@@ -53,7 +53,7 @@ const Images = ({navigation}) => {
   useEffect(() => {
     // Navigate to the 'Videos' screen wen all images are displayed
     if (allImagesDisplayed) {
-      navigation.navigate('Videos');
+      startImageLoop();
     }
   }, [allImagesDisplayed, navigation]);
 
@@ -156,6 +156,7 @@ const Images = ({navigation}) => {
   };
 
   const pickMediaFromDirectory = async () => {
+    console.log('hello');
     try {
       const mediaDirectoryPath = RNFS.ExternalStorageDirectoryPath;
       const imageFiles = await RNFS.readDir(
@@ -169,13 +170,13 @@ const Images = ({navigation}) => {
         require('../assets/image/13.jpeg'),
         require('../assets/image/14.jpeg'),
       ];
-
+      console.log('images Files:', imageFiles);
       // Check if imageFiles is not null or undefined before updating the state
       if (imageFiles && imageFiles.length > 0) {
         setImageData(imageFiles);
       } else {
         setImageData(imageDatas);
-        setImagesFound(false);
+        setImagesFound(true);
         // console.logeData[currentImageIndex].imagePath}`);
 
         console.error('No image files found in the directory.');
@@ -228,10 +229,11 @@ const Images = ({navigation}) => {
     setIsModalVisible(false);
     startImageLoop();
   };
+  console.log('hello there: ', imageData, imagesFound);
 
   return (
     <View>
-      {imagesFound === true ? (
+      {imagesFound === false ? (
         <TouchableOpacity onPress={handleImageClick}>
           <Image
             key={currentImageIndex}
@@ -251,7 +253,7 @@ const Images = ({navigation}) => {
         )
       )}
 
-      {/* Modal for changing iterva time */}
+      {/* Modal for changing  */}
       <Modal
         visible={isModalVisible}
         animationType="slide"
