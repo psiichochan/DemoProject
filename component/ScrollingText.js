@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import React, {useLayoutEffect, useEffect, useRef, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {StyleSheet, View, Text, Animated, Dimensions} from 'react-native';
 import RNFS from 'react-native-fs';
 import {
@@ -12,7 +12,7 @@ const ScrollingTextTicker = () => {
   const [textLength, setTextLength] = useState(0);
   const screenWidth = Dimensions.get('window').width;
   const [textFromFile, setTextFromFile] = useState('');
-  const staticText = 'Welcome To ThinPc';
+  const staticText = 'WelcomeThinPc';
 
   useEffect(() => {
     readTextFromFile();
@@ -41,39 +41,31 @@ const ScrollingTextTicker = () => {
     }
   };
 
-  useLayoutEffect(() => {
-    // Measure the width of the text after it is rendered
-    if (textLength === 0) {
-      setTextLength(screenWidth + textLength);
-    }
-  }, [textLength, screenWidth]);
-
   return (
     <View style={styles.containerTicker}>
-      <Animated.View
-        style={[
-          styles.tickerContainer,
-          {
-            transform: [
-              {
-                translateX: animatedValue.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [screenWidth, -textLength],
-                }),
-              },
-            ],
-          },
-        ]}>
-        <Text
-          style={styles.tickerText}
+      <View style={styles.tickerContainer}>
+        <Animated.Text
+          style={[
+            styles.tickerText,
+            {
+              transform: [
+                {
+                  translateX: animatedValue.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [screenWidth, -textLength],
+                  }),
+                },
+              ],
+            },
+          ]}
           onLayout={event => {
             if (textLength === 0) {
               setTextLength(event.nativeEvent.layout.width);
             }
           }}>
           {textFromFile || staticText}
-        </Text>
-      </Animated.View>
+        </Animated.Text>
+      </View>
     </View>
   );
 };
@@ -88,24 +80,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     zIndex: 2,
     height: hp(3),
-    width: hp(100),
-
+    width: wp(100),
     backgroundColor: 'black', // Set a background color to allow touch events to pass through
   },
   tickerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: wp(2),
+    width: wp(100),
   },
   tickerText: {
     fontSize: 24,
     color: 'green',
-    // Add other text styles as needed
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    zIndex: 1,
+    fontWeight: 'bold',
   },
 });
 

@@ -1,16 +1,31 @@
 /* eslint-disable prettier/prettier */
 import React, {useState, useEffect} from 'react';
-import {View, StyleSheet} from 'react-native';
+import {View, StyleSheet, BackHandler} from 'react-native';
 import Video from 'react-native-video';
 import RNFS from 'react-native-fs';
 
-const Videos = ({navigation}) => {
+const Videos = () => {
   const [videoData, setVideoData] = useState([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
 
   useEffect(() => {
     pickMediaFromDirectory();
-  }, []); // Ensure useEffect runs only once on component mount
+
+    const handleBackButton = () => {
+      // Handle cleanup or other tasks before going back
+      BackHandler.exitApp(); // Exit the app when the back button is pressed on any video
+      return true; // Return true to prevent default back button behavior
+    };
+
+    const backHandlerSubscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      handleBackButton,
+    );
+
+    return () => {
+      backHandlerSubscription.remove();
+    };
+  }, []); // Run this effect only once on component mount
 
   const pickMediaFromDirectory = async () => {
     try {
@@ -29,11 +44,6 @@ const Videos = ({navigation}) => {
     setCurrentVideoIndex(prevIndex => (prevIndex + 1) % videoData.length);
   };
 
-  // const goBack = () => {
-  //   // Navigate back to the previous screen
-  //   navigation.goBack();
-  // };
-
   if (videoData.length === 0) {
     return null; // or a loading indicator if you want
   }
@@ -46,12 +56,9 @@ const Videos = ({navigation}) => {
         source={videoSource}
         style={styles.video}
         resizeMode="cover"
-        onEnd={playNextVideo}
+        onEnd={() => playNextVideo()}
         muted={false}
       />
-      {/* {currentVideoIndex === videoData.length - 1 &&
-        // Check if the last video has ended, then navigate back
-        goBack()} */}
     </View>
   );
 };

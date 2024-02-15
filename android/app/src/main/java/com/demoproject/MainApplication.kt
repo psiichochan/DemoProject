@@ -26,7 +26,8 @@ class MainApplication : Application(), ReactApplication {
                             // for example:
                             // add(MyReactNativePackage())
                             add(usbDetectionPackage)
-                        }
+
+                        } + listOf(USBModulePackage())
 
                 override fun getJSMainModuleName(): String = "index"
 

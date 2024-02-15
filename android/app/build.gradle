@@ -113,6 +113,7 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
     implementation("com.facebook.react:flipper-integration")
+    implementation project(':react-native-restart')
 
 
     // implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk21:1.8.0")
@@ -125,3 +126,5 @@ dependencies {
 }
 
 apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)
+apply plugin: 'com.android.application'
+apply plugin: 'com.google.gms.google-services'
