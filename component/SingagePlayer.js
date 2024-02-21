@@ -8,18 +8,17 @@ import {
   TextInput,
   TouchableOpacity,
   Text,
-  Alert,
   Animated,
   Dimensions,
 } from 'react-native';
+import Video from 'react-native-video';
 import RNFS from 'react-native-fs';
 import CheckBox from 'react-native-checkbox';
-import Video from 'react-native-video';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from 'react-native-responsive-screen';
-import {check, PERMISSIONS, RESULTS, request} from 'react-native-permissions';
 
 const SignagePlayer = ({navigation}) => {
   const [mediaData, setMediaData] = useState([]);
@@ -28,30 +27,14 @@ const SignagePlayer = ({navigation}) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [intervalTime, setIntervalTime] = useState('5');
   const [permissionsGranted, setPermissionGranted] = useState(false);
-  const [mediaFound, setMediaFound] = useState(true);
+  const animatedValue = useRef(new Animated.Value(0)).current;
   const [textLength, setTextLength] = useState(0);
   const [showScrollingText, setShowScrollingText] = useState(false);
   const screenWidth = Dimensions.get('window').width;
   const [modalClicked, setModalClicked] = useState(false);
   const [textFromFile, setTextFromFile] = useState('');
-  const [isVideo, setIsVideo] = useState(false);
-  const staticText = 'WelcomeThinPc';
-
+  const [videoEnded, setVideoEnded] = useState(false);
   const intervalIdRef = useRef(null);
-  const animatedValue = useRef(new Animated.Value(0)).current;
-
-  const readTextFromFile = async () => {
-    try {
-      if (permissionsGranted) {
-        const filePath =
-          RNFS.ExternalStorageDirectoryPath + '/signage/ticker/ticker.txt';
-        const fileContent = await RNFS.readFile(filePath, 'utf8');
-        setTextFromFile(fileContent);
-      }
-    } catch (error) {
-      console.error('Error reading text from file:', error);
-    }
-  };
 
   useEffect(() => {
     readTextFromFile();
@@ -76,125 +59,40 @@ const SignagePlayer = ({navigation}) => {
     scrollText();
   }, [animatedValue, screenWidth]);
 
-  useEffect(() => {
-    const fetchDataAndStartLoop = async () => {
-      requestStoragePermissionWrite();
-      setPermissionGranted(true);
-      await pickMediaFromDirectory();
+  const readTextFromFile = async () => {
+    try {
       if (permissionsGranted) {
-        await requestStoragePermission();
-        startMediaLoop();
+        const filePath =
+          RNFS.ExternalStorageDirectoryPath + '/signage/ticker/ticker.txt';
+        const fileContent = await RNFS.readFile(filePath, 'utf8');
+        setTextFromFile(fileContent);
       }
-    };
+    } catch (error) {
+      console.error('Error reading text from file:', error);
+    }
+  };
 
+  useEffect(() => {
     fetchDataAndStartLoop();
   }, []);
 
   useEffect(() => {
-    startMediaLoop();
-  }, [mediaData, intervalTime, isModalVisible]);
-
-  useEffect(() => {
     if (allMediaDisplayed) {
-      navigation.navigate('Media'); // You may adjust the navigation destination
+      navigation.navigate('Videos');
     }
   }, [allMediaDisplayed, navigation]);
 
-  const requestStoragePermission = async () => {
-    try {
-      const permissionStatus = await check(
-        PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
-      );
-      const writePermissionStatus = await check(
-        PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE,
-      );
-
-      if (
-        permissionStatus !== RESULTS.GRANTED ||
-        writePermissionStatus !== RESULTS.GRANTED
-      ) {
-        const permissionRequestResult = await request(
-          PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
-          PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE,
-        );
-
-        if (
-          permissionRequestResult[0] !== RESULTS.GRANTED ||
-          permissionRequestResult[1] !== RESULTS.GRANTED
-        ) {
-          console.warn('Read or write storage permission not granted.');
-        }
-      }
-    } catch (error) {
-      console.error('Error checking or requesting storage permission:', error);
+  const fetchDataAndStartLoop = async () => {
+    await requestStoragePermissionWrite();
+    setPermissionGranted(true);
+    await pickMediaFromDirectory();
+    if (permissionsGranted) {
+      await requestStoragePermission();
     }
-  };
-
-  const requestStoragePermissionWrite = async () => {
-    try {
-      const permissionStatus = await check(
-        PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE,
-      );
-
-      if (permissionStatus !== RESULTS.GRANTED) {
-        const permissionRequestResult = await request(
-          PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE,
-        );
-
-        if (permissionRequestResult !== RESULTS.GRANTED) {
-          console.warn('Write storage permission not granted.');
-          Alert.alert(
-            'Permission Required',
-            'Please grant storage permission to use the app.',
-          );
-        } else {
-          console.log('Write storage permission granted.');
-          createFolders();
-        }
-      } else {
-        console.log('Write storage permission already granted.');
-        createFolders();
-      }
-    } catch (error) {
-      console.error('Error checking or requesting storage permission:', error);
-    }
-  };
-
-  const createFolders = async () => {
-    try {
-      const storagePath = RNFS.ExternalStorageDirectoryPath;
-      const mainFolderPath = `${storagePath}/signage`;
-
-      const isMainFolderExists = await RNFS.exists(mainFolderPath);
-
-      if (!isMainFolderExists) {
-        await RNFS.mkdir(mainFolderPath);
-        console.log('Main folder created successfully:', mainFolderPath);
-
-        const subfolders = ['image', 'video', 'audio', 'ticker'];
-        for (const subfolder of subfolders) {
-          const subfolderPath = `${mainFolderPath}/${subfolder}`;
-          const isSubfolderExists = await RNFS.exists(subfolderPath);
-
-          if (!isSubfolderExists) {
-            await RNFS.mkdir(subfolderPath);
-            console.log(
-              `Subfolder "${subfolder}" created successfully:`,
-              subfolderPath,
-            );
-          } else {
-            console.log(
-              `Subfolder "${subfolder}" already exists:`,
-              subfolderPath,
-            );
-          }
-        }
-      } else {
-        console.log('Main folder already exists:', mainFolderPath);
-      }
-    } catch (error) {
-      console.error('Error creating folders:', error);
-    }
+    const savedIntervalTime = await AsyncStorage.getItem('intervalTime');
+    const initialIntervalTime = savedIntervalTime || '5';
+    setIntervalTime(initialIntervalTime);
+    startMediaLoop(initialIntervalTime);
   };
 
   const pickMediaFromDirectory = async () => {
@@ -209,43 +107,36 @@ const SignagePlayer = ({navigation}) => {
         'video',
       );
 
-      const combinedMediaData = imageFiles.map(file => ({
-        ...file,
-        isImage: true,
+      const imageDatas = imageFiles.map(file => ({
+        path: `file://${file.path}`,
         isVideo: false,
       }));
+      console.log(imageFiles);
+      const videoDatas = videoFiles.map(file => ({
+        path: `file://${file.path}`,
+        isVideo: true,
+      }));
 
-      videoFiles.forEach(file => {
-        combinedMediaData.push({
-          ...file,
-          isImage: false,
-          isVideo: true,
-        });
-      });
-
-      setMediaData(combinedMediaData);
+      setMediaData([...imageDatas, ...videoDatas]);
     } catch (error) {
       console.error('Error picking media from directory:', error);
     }
   };
 
-  const startMediaLoop = () => {
+  const startMediaLoop = initialIntervalTime => {
     if (mediaData.length > 0 && !isModalVisible) {
-      clearInterval(intervalIdRef.current);
+      stopMediaLoop();
       setAllMediaDisplayed(false);
-
       intervalIdRef.current = setInterval(() => {
         setCurrentIndex(prevIndex => {
           const newIndex = (prevIndex + 1) % mediaData.length;
           if (newIndex === 0) {
             setAllMediaDisplayed(true);
           }
-
-          setIsVideo(mediaData[newIndex].isVideo);
-
+          setVideoEnded(mediaData[newIndex].isVideo);
           return newIndex;
         });
-      }, parseInt(intervalTime, 10) * 1000);
+      }, parseInt(initialIntervalTime, 10) * 1000);
     }
   };
 
@@ -260,56 +151,43 @@ const SignagePlayer = ({navigation}) => {
 
   const handleModalClose = () => {
     setIsModalVisible(false);
-    startMediaLoop();
+    startMediaLoop(intervalTime);
   };
 
   const handleSaveIntervalTime = () => {
     setIsModalVisible(false);
     setModalClicked(true);
     if (showScrollingText) {
-      startMediaLoop();
+      startMediaLoop(intervalTime);
     }
   };
+
+  useEffect(() => {
+    AsyncStorage.setItem('intervalTime', intervalTime);
+  }, [intervalTime]);
 
   return (
     <View style={styles.container}>
       <View style={styles.mediaContainer}>
-        {mediaFound === false ? (
+        {mediaData.length > 0 && (
           <TouchableOpacity onPress={handleMediaClick}>
-            <Image
-              key={currentIndex}
-              source={mediaData[currentIndex]}
-              style={styles.media}
-            />
+            {mediaData[currentIndex].isVideo ? (
+              <Video
+                key={currentIndex}
+                source={{uri: mediaData[currentIndex].path}}
+                style={styles.media}
+                resizeMode="cover"
+                onEnd={() => setVideoEnded(true)}
+                muted={false}
+              />
+            ) : (
+              <Image
+                key={currentIndex}
+                source={{uri: mediaData[currentIndex].path}}
+                style={styles.media}
+              />
+            )}
           </TouchableOpacity>
-        ) : (
-          mediaData.length > 0 && (
-            <TouchableOpacity onPress={handleMediaClick}>
-              {isVideo ? (
-                <Video
-                  key={currentIndex}
-                  source={{uri: `file://${mediaData[currentIndex].path}`}}
-                  style={styles.media}
-                  resizeMode="cover"
-                  onEnd={() => {
-                    setCurrentIndex(
-                      prevIndex => (prevIndex + 1) % mediaData.length,
-                    );
-                    setIsVideo(
-                      mediaData[(currentIndex + 1) % mediaData.length].isVideo,
-                    );
-                  }}
-                  muted={false}
-                />
-              ) : (
-                <Image
-                  key={currentIndex}
-                  source={{uri: `file://${mediaData[currentIndex].path}`}}
-                  style={styles.media}
-                />
-              )}
-            </TouchableOpacity>
-          )
         )}
       </View>
 
@@ -336,7 +214,7 @@ const SignagePlayer = ({navigation}) => {
                   setTextLength(event.nativeEvent.layout.width);
                 }
               }}>
-              {textFromFile || staticText}
+              {textFromFile || 'WelcomeThinPc'}
             </Text>
           </Animated.View>
         </View>
@@ -364,7 +242,6 @@ const SignagePlayer = ({navigation}) => {
                 onChange={() => setShowScrollingText(!showScrollingText)}
               />
             </View>
-
             <TouchableOpacity onPress={handleSaveIntervalTime}>
               <View style={styles.button}>
                 <Text style={styles.buttonText}>Save</Text>
@@ -395,13 +272,11 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 10,
   },
-
   checkMark: {
     fontSize: 24,
     color: 'green',

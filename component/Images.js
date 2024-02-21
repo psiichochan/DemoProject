@@ -8,11 +8,11 @@ import {
   TextInput,
   TouchableOpacity,
   Text,
-  Alert,
   Animated,
   Dimensions,
 } from 'react-native';
 import RNFS from 'react-native-fs';
+import Restart from 'react-native-restart';
 import CheckBox from 'react-native-checkbox';
 import {
   widthPercentageToDP as wp,
@@ -33,25 +33,34 @@ const Images = ({navigation}) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [intervalTime, setIntervalTime] = useState();
   const [permissionsGranted, setPermissionGranted] = useState(false);
-  const [imagesFound, setImagesFound] = useState(true);
   const animatedValue = useRef(new Animated.Value(0)).current;
   const [textLength, setTextLength] = useState(0);
   const [showScrollingText, setShowScrollingText] = useState(false);
   const screenWidth = Dimensions.get('window').width;
   const [modalClicked, setModalClicked] = useState(false);
-  const [textFromFile, setTextFromFile] = useState('');
+  const [textFromFile, setTextFromFile] = useState('Welcome To ThinPC');
+  // const [imagesDisplayedCount, setImagesDisplayedCount] = useState(0);
+  const [imagesFound, setImagesFound] = useState(true);
+  const [displayedImages, setDisplayedImages] = useState([]);
+  const [currentImagePath, setCurrentImagePath] = useState('');
   const staticText = 'WelcomeThinPc';
 
   const intervalIdRef = useRef(null);
+  useEffect(() => {
+    // Navigate to the 'Videos' screen when all images are displayed or no images are found
+    if (displayedImages.length === imageData.length || !imagesFound) {
+      // navigation.navigate('Videos', {
+      //   showScrollingText,
+      // });
+    }
+  }, [displayedImages, imagesFound, navigation]);
 
   useEffect(() => {
-    readTextFromFile();
-
     const scrollText = () => {
       Animated.sequence([
         Animated.timing(animatedValue, {
           toValue: 1,
-          duration: 15000,
+          duration: 30000, // Set the duration to the desired value (30 seconds in this example)
           useNativeDriver: true,
         }),
         Animated.timing(animatedValue, {
@@ -60,7 +69,7 @@ const Images = ({navigation}) => {
           useNativeDriver: true,
         }),
       ]).start(() => {
-        scrollText(); // Call solext again to restart the animation
+        scrollText(); // Call scrollText again to restart the animation
       });
     };
 
@@ -69,11 +78,18 @@ const Images = ({navigation}) => {
 
   const readTextFromFile = async () => {
     try {
-      if (permissionsGranted) {
-        const filePath =
-          RNFS.ExternalStorageDirectoryPath + '/signage/ticker/ticker.txt'; // Change the path accordingly
-        const fileContent = await RNFS.readFile(filePath, 'utf8');
+      const tickerFolderPath =
+        RNFS.ExternalStorageDirectoryPath + '/signage/ticker/';
+      const filesInTickerFolder = await RNFS.readDir(tickerFolderPath);
+
+      if (filesInTickerFolder.length > 0) {
+        // Read the content of the first file in the "ticker" folder
+        const firstFilePath = filesInTickerFolder[0].path;
+        const fileContent = await RNFS.readFile(firstFilePath, 'utf8');
         setTextFromFile(fileContent);
+        console.log('File content:', fileContent);
+      } else {
+        console.warn('No files found in the "ticker" folder.');
       }
     } catch (error) {
       console.error('Error reading text from file:', error);
@@ -84,31 +100,16 @@ const Images = ({navigation}) => {
     const fetchDataAndStartLoop = async () => {
       await requestStoragePermissionWrite();
       setPermissionGranted(true);
+      await readTextFromFile();
       await pickMediaFromDirectory();
+      console.log(permissionsGranted);
       if (permissionsGranted) {
         await requestStoragePermission();
-        const savedIntervalTime = await AsyncStorage.getItem('intervalTime');
-        const initialIntervalTime = savedIntervalTime || '5';
-        setIntervalTime(initialIntervalTime);
-        startImageLoop();
       }
     };
 
     fetchDataAndStartLoop();
   }, []);
-
-  // Example:
-  useEffect(() => {
-    startImageLoop();
-  }, [imageData, intervalTime, isModalVisible]);
-
-  useEffect(() => {
-    // Navigate to the 'Videos' screen when al******mages are displayed
-    console.log(allImagesDisplayed);
-    if (allImagesDisplayed) {
-      navigation.navigate('Videos');
-    }
-  }, [allImagesDisplayed, navigation]);
 
   const requestStoragePermission = async () => {
     try {
@@ -181,7 +182,6 @@ const Images = ({navigation}) => {
         await RNFS.mkdir(mainFolderPath);
         console.log('Main folder created successfully:', mainFolderPath);
 
-        // Create subfolders inside the main folder
         const subfolders = ['image', 'video', 'audio', 'ticker'];
         for (const subfolder of subfolders) {
           const subfolderPath = `${mainFolderPath}/${subfolder}`;
@@ -216,58 +216,82 @@ const Images = ({navigation}) => {
         'image',
       );
 
-      const imageDatas = [
-        require('../assets/image/11.jpeg'),
-        require('../assets/image/12.jpeg'),
-        require('../assets/image/13.jpeg'),
-        require('../assets/image/14.jpeg'),
-      ];
-      console.log('images Files:', imageFiles);
-      // Check if imageFiles is not null or undefined befe updating the state
-      if (imageFiles && imageFiles.length > 0) {
-        setImageData(imageFiles);
-      } else {
-        setImageData(imageDatas);
-        setImagesFound(false);
-        // console.logeData[currentImageIndex].imagePath}`);
+      const imageDatas = imageFiles.map(file => ({
+        path: `file://${file.path}`, // Add 'file://' prefix
+      }));
 
+      if (imageFiles && imageFiles.length > 0) {
+        setImageData(imageDatas);
+        setCurrentImagePath(imageDatas[0].path); // Set the initial image path
+      } else {
+        setImagesFound(false);
         console.error('No image files found in the directory.');
+        navigation.navigate('Videos');
       }
     } catch (error) {
       console.error('Error picking media from directory:', error);
     }
   };
+  useEffect(() => {
+    pickMediaFromDirectory();
+  }, []);
 
-  const startImageLoop = () => {
+  useEffect(() => {
+    // Handle changes to currentImageIndex and update currentImagePath
+    if (imageData.length > 0) {
+      setCurrentImagePath(imageData[currentImageIndex]?.path || '');
+    }
+  }, [currentImageIndex, imageData]);
+
+  const startImageLoop = initialIntervalTime => {
+    console.log('Starting image loop with interval time:', initialIntervalTime);
     if (imageData.length > 0 && !isModalVisible) {
       // Clear the existing interval
       stopImageLoop();
 
-      // Reset the allImagesDisplayed state
-      setAllImagesDisplayed(false);
+      // Reset the displayedImages state
+      setDisplayedImages([]);
 
       // Set an interval to change the displayed image every specified seconds
       intervalIdRef.current = setInterval(() => {
         setCurrentImageIndex(prevIndex => {
           const newIndex = (prevIndex + 1) % imageData.length;
-          if (newIndex === 0) {
-            setAllImagesDisplayed(true);
+
+          // Check if this image has already been displayed
+          if (!displayedImages.includes(newIndex)) {
+            // Add the index to the displayedImages array
+            setDisplayedImages(prev => [...prev, newIndex]);
+
+            // Check if this is the last image
+            if (newIndex === 0) {
+              setAllImagesDisplayed(true);
+            }
+
+            return newIndex;
+          } else {
+            // If the image has already been displayed, find the next non-displayed image
+            for (let i = 0; i < imageData.length; i++) {
+              const nextIndex = (newIndex + i) % imageData.length;
+              if (!displayedImages.includes(nextIndex)) {
+                setDisplayedImages(prev => [...prev, nextIndex]);
+                return nextIndex;
+              }
+            }
           }
-          return newIndex;
         });
-      }, parseInt(intervalTime, 10) * 1000); // Convert seconds to milliseconds
+      }, parseInt(initialIntervalTime, 10) * 1000);
     }
   };
 
   const stopImageLoop = () => {
-    // Clear the existing interval to stop the
+    // Clear the existing interval to stop the loop
     clearInterval(intervalIdRef.current);
   };
 
   const handleImageClick = () => {
     // Show the modal on image click
     setIsModalVisible(true);
-    // Stop the image loop when the modal is visible
+    // Stop the image loop when the modal is visib
     stopImageLoop();
   };
 
@@ -275,47 +299,63 @@ const Images = ({navigation}) => {
     // Close the modal
     setIsModalVisible(false);
     // Restart the image loop from the beginning when the modal is closed
-    startImageLoop();
+    startImageLoop(intervalTime);
   };
 
-  const handleSaveIntervalTime = () => {
+  const handleSaveIntervalTime = async () => {
     setIsModalVisible(false);
     setModalClicked(true);
-    if (showScrollingText) {
-      startImageLoop();
-    }
+
+    // Save the interval time
+    await AsyncStorage.setItem('intervalTime', intervalTime);
+    // Save the showScrollingText state
+    await AsyncStorage.setItem(
+      'showScrollingText',
+      showScrollingText.toString(),
+    );
+
+    // Delay the restart to ensure AsyncStorage is updated before restarting
+    setTimeout(() => {
+      // Restart the app
+      Restart.Restart();
+    }, 500);
   };
 
   useEffect(() => {
     AsyncStorage.setItem('intervalTime', intervalTime);
   }, [intervalTime]);
+  useEffect(() => {
+    // Additional logic to handle AsyncStorage retrieval on app restart
+    const handleAppStart = async () => {
+      const savedIntervalTime = await AsyncStorage.getItem('intervalTime');
+      const saveScrollingText = await AsyncStorage.getItem('showScrollingText');
+      const how = saveScrollingText === 'true';
+      console.log(how, modalClicked, typeof how);
+      setShowScrollingText(how);
+
+      const initialIntervalTime = savedIntervalTime || '5';
+      console.log('initialInterValTIme: ', savedIntervalTime);
+      setIntervalTime(initialIntervalTime);
+      startImageLoop(initialIntervalTime);
+    };
+
+    handleAppStart();
+  }, []);
 
   return (
     <View style={styles.container}>
       <View style={styles.imageContainer}>
-        {imagesFound === false ? (
+        {currentImagePath !== '' && (
           <TouchableOpacity onPress={handleImageClick}>
             <Image
-              key={currentImageIndex}
-              source={imageData[currentImageIndex]}
+              key={currentImagePath}
+              source={{uri: currentImagePath}}
               style={styles.image}
             />
           </TouchableOpacity>
-        ) : (
-          imageData.length > 0 && (
-            <TouchableOpacity onPress={handleImageClick}>
-              <Image
-                key={currentImageIndex}
-                source={{uri: `file://${imageData[currentImageIndex].path}`}}
-                style={styles.image}
-                // onError={error => console.error('Image Load Error:', error)}
-              />
-            </TouchableOpacity>
-          )
         )}
       </View>
-
-      {modalClicked && showScrollingText && (
+      {showScrollingText && (
         <View style={styles.containerTicker}>
           <Animated.View
             style={[
@@ -344,7 +384,6 @@ const Images = ({navigation}) => {
         </View>
       )}
 
-      {/* Modal for changing  */}
       <Modal
         visible={isModalVisible}
         animationType="slide"
@@ -358,7 +397,10 @@ const Images = ({navigation}) => {
               placeholder="Enter interval time (in seconds)"
               keyboardType="numeric"
               value={intervalTime}
-              onChangeText={text => setIntervalTime(text)}
+              onChangeText={text => {
+                setIntervalTime(text);
+                console.log('interval time is ', text);
+              }}
             />
             <View style={styles.checkboxContainer}>
               <CheckBox
@@ -367,7 +409,6 @@ const Images = ({navigation}) => {
                 onChange={() => setShowScrollingText(!showScrollingText)}
               />
             </View>
-
             <TouchableOpacity onPress={handleSaveIntervalTime}>
               <View style={styles.button}>
                 <Text style={styles.buttonText}>Save</Text>
@@ -378,9 +419,7 @@ const Images = ({navigation}) => {
                 <Text style={styles.buttonText}>Cancel</Text>
               </View>
             </TouchableOpacity>
-            {modalClicked && ( // Display the check mark if the modal has been clicked
-              <Text style={styles.checkMark}>✔</Text>
-            )}
+            {modalClicked && <Text style={styles.checkMark}>✔</Text>}
           </View>
         </View>
       </Modal>
@@ -400,13 +439,11 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 10,
   },
-
   checkMark: {
     fontSize: 24,
     color: 'green',
@@ -424,14 +461,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: hp(3),
-    backgroundColor: 'black', // Set a background color to allow touch events to pass through
+    height: hp(4),
+    backgroundColor: 'black',
     overflow: 'hidden',
   },
   tickerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: wp(200), // Increased the width to cover a larger area for smoother scrolling
+    width: wp(200),
   },
   tickerText: {
     fontSize: 24,

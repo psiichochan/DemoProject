@@ -1,20 +1,79 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 /* eslint-disable prettier/prettier */
-import React, {useState, useEffect} from 'react';
-import {View, StyleSheet, BackHandler} from 'react-native';
+import React, {useState, useEffect, useRef} from 'react';
+import {
+  View,
+  StyleSheet,
+  BackHandler,
+  Animated,
+  Dimensions,
+  Text,
+} from 'react-native';
 import Video from 'react-native-video';
 import RNFS from 'react-native-fs';
+import {
+  widthPercentageToDP as wp,
+  heightPercentageToDP as hp,
+} from 'react-native-responsive-screen';
 
-const Videos = () => {
+const Videos = ({navigation, route}) => {
+  const {showScrollingText} = true;
+  // console.log(showScrollingText);
+
   const [videoData, setVideoData] = useState([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const animatedValue = useRef(new Animated.Value(0)).current;
+  const [textFromFile, setTextFromFile] = useState('');
+  const [textLength, setTextLength] = useState(0);
+  const screenWidth = Dimensions.get('window').width;
+  const staticText = 'WelcomeThinPc';
+
+  const readTextFromFile = async () => {
+    try {
+      const tickerFolderPath =
+        RNFS.ExternalStorageDirectoryPath + '/signage/ticker/';
+      const filesInTickerFolder = await RNFS.readDir(tickerFolderPath);
+
+      if (filesInTickerFolder.length > 0) {
+        // Read the content of the first file in the "ticker" folder
+        const firstFilePath = filesInTickerFolder[0].path;
+        const fileContent = await RNFS.readFile(firstFilePath, 'utf8');
+        setTextFromFile(fileContent);
+        console.log('File content:', fileContent);
+      } else {
+        console.warn('No files found in the "ticker" folder.');
+      }
+    } catch (error) {
+      console.error('Error reading text from file:', error);
+    }
+  };
 
   useEffect(() => {
     pickMediaFromDirectory();
+    readTextFromFile();
+
+    const scrollText = () => {
+      Animated.sequence([
+        Animated.timing(animatedValue, {
+          toValue: 1,
+          duration: 30000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(animatedValue, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        scrollText();
+      });
+    };
+
+    scrollText();
 
     const handleBackButton = () => {
-      // Handle cleanup or other tasks before going back
-      BackHandler.exitApp(); // Exit the app when the back button is pressed on any video
-      return true; // Return true to prevent default back button behavior
+      BackHandler.exitApp();
+      return true;
     };
 
     const backHandlerSubscription = BackHandler.addEventListener(
@@ -25,7 +84,7 @@ const Videos = () => {
     return () => {
       backHandlerSubscription.remove();
     };
-  }, []); // Run this effect only once on component mount
+  }, [animatedValue]);
 
   const pickMediaFromDirectory = async () => {
     try {
@@ -34,7 +93,12 @@ const Videos = () => {
         `${mediaDirectoryPath}/signage/video/`,
         'video',
       );
-      setVideoData(videoFiles);
+      if (videoFiles.length === 0) {
+        navigation.goBack();
+        console.log('No videos found in directory');
+      } else {
+        setVideoData(videoFiles);
+      }
     } catch (error) {
       console.error('Error picking media from directory:', error);
     }
@@ -45,7 +109,7 @@ const Videos = () => {
   };
 
   if (videoData.length === 0) {
-    return null; // or a loading indicator if you want
+    return null;
   }
 
   const videoSource = {uri: `file://${videoData[currentVideoIndex].path}`};
@@ -59,11 +123,58 @@ const Videos = () => {
         onEnd={() => playNextVideo()}
         muted={false}
       />
+      {showScrollingText && (
+        <View style={styles.containerTicker}>
+          <Animated.View
+            style={[
+              styles.tickerContainer,
+              {
+                transform: [
+                  {
+                    translateX: animatedValue.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [screenWidth, -textLength - screenWidth],
+                    }),
+                  },
+                ],
+              },
+            ]}>
+            <Text
+              style={styles.tickerText}
+              onLayout={event => {
+                if (textLength === 0) {
+                  setTextLength(event.nativeEvent.layout.width);
+                }
+              }}>
+              {textFromFile || staticText}
+            </Text>
+          </Animated.View>
+        </View>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  containerTicker: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: hp(3),
+    backgroundColor: 'black',
+    overflow: 'hidden',
+  },
+  tickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: wp(200),
+  },
+  tickerText: {
+    fontSize: 24,
+    color: 'green',
+    fontWeight: 'bold',
+  },
   container: {
     flex: 1,
     justifyContent: 'center',
