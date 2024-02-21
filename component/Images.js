@@ -49,9 +49,9 @@ const Images = ({navigation}) => {
   useEffect(() => {
     // Navigate to the 'Videos' screen when all images are displayed or no images are found
     if (displayedImages.length === imageData.length || !imagesFound) {
-      // navigation.navigate('Videos', {
-      //   showScrollingText,
-      // });
+      navigation.navigate('Videos', {
+        showScrollingText,
+      });
     }
   }, [displayedImages, imagesFound, navigation]);
 
