@@ -4,23 +4,18 @@ import {NavigationContainer} from '@react-navigation/native';
 import {createStackNavigator} from '@react-navigation/stack';
 import Images from './component/Images';
 import Videos from './component/Videos';
-import {
-  NativeModules,
-  ToastAndroid,
-  NativeEventEmitter,
-  Alert,
-  StyleSheet,
-} from 'react-native';
+import {NativeModules, ToastAndroid, NativeEventEmitter} from 'react-native';
 import Toast from 'react-native-toast-message';
 import ScrollingText from './component/ScrollingText';
 import DeviceInfo from 'react-native-device-info';
 import RNFS from 'react-native-fs';
 import Restart from 'react-native-restart';
 import MacAddressSending from './component/KeyCode/MacAddressSending';
-import SignagePlayer from './component/SingagePlayer';
+
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import ActivationScreen from './component/ActivationScreen';
+
+import MediaComponent from './component/SingagePlayer';
 
 const Stack = createStackNavigator();
 const USBModule = NativeModules.USBModule;
@@ -166,17 +161,17 @@ const App = () => {
           await copyFolderFromUsb(connectedUsbPath);
 
           // Display a toast message when USB drive is connected
-          ToastAndroid.showWithGravity(
-            'Pendrive Is Connected. Now Copying the Data.',
-            ToastAndroid.SHORT,
-            ToastAndroid.CENTER,
-            StyleSheet.create({
-              text: {
-                fontSize: 18, // Change the font size as needed
-                fontWeight: 'bold', // Make the text bold
-              },
-            }),
-          );
+          // ToastAndroid.showWithGravity(
+          //   'Pendrive Is Connected. Now Copying the Data.',
+          //   ToastAndroid.SHORT,
+          //   ToastAndroid.CENTER,
+          //   StyleSheet.create({
+          //     text: {
+          //       fontSize: 18, // Change the font size as needed
+          //       fontWeight: 'bold', // Make the text bold
+          //     },
+          //   }),
+          // );
         },
       );
 
@@ -207,11 +202,22 @@ const App = () => {
       // Perform the recursive copy operation
       await copyRecursive(sourcePath, destinationPath);
 
-      ToastAndroid.showWithGravity(
-        'Please Remove the USB. Folder Copied Successful',
-        ToastAndroid.SHORT,
-        ToastAndroid.CENTER,
-      );
+      Toast.show({
+        type: 'success',
+        position: 'top',
+        text1: 'Data Copied Successfully',
+        text2: 'Please Remove the USB',
+        visibilityTime: 3000, // 3 seconds
+        autoHide: true,
+        topOffset: 30, // Adjust as needed
+        textStyle: {fontWeight: 'bold', fontSize: 20},
+      });
+      console.log('Please Remove the USB. Folder Copied Successful');
+      // ToastAndroid.showWithGravity(
+      //   'Please Remove the USB. Folder Copied Successful',
+      //   ToastAndroid.SHORT,
+      //   ToastAndroid.CENTER,
+      // );
       Restart.Restart();
     } catch (error) {
       console.error('Error copying signage folder:', error);
@@ -249,15 +255,15 @@ const App = () => {
   }
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Images">
+      <Stack.Navigator initialRouteName="MediaComponent">
         {/* <Stack.Screen
           name="ActivationScreen"
           component={ActivationScreen}
           options={{headerShown: false}}
         /> */}
         <Stack.Screen
-          name="SignagePlayer"
-          component={SignagePlayer}
+          name="MediaComponent"
+          component={MediaComponent}
           options={{headerShown: false}}
         />
         <Stack.Screen
@@ -265,6 +271,7 @@ const App = () => {
           component={Images}
           options={{headerShown: false}}
         />
+
         <Stack.Screen
           name="Macadress"
           component={MacAddressSending}
@@ -281,6 +288,7 @@ const App = () => {
           options={{headerShown: false}}
         />
       </Stack.Navigator>
+      <Toast />
     </NavigationContainer>
   );
 };

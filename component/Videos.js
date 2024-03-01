@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Video from 'react-native-video';
 import RNFS from 'react-native-fs';
+import {useFocusEffect} from '@react-navigation/native'; // Import useFocusEffect
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
@@ -18,7 +19,6 @@ import {
 
 const Videos = ({navigation, route}) => {
   const {showScrollingText} = true;
-  // console.log(showScrollingText);
 
   const [videoData, setVideoData] = useState([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
@@ -105,8 +105,24 @@ const Videos = ({navigation, route}) => {
   };
 
   const playNextVideo = () => {
-    setCurrentVideoIndex(prevIndex => (prevIndex + 1) % videoData.length);
+    const nextIndex = (currentVideoIndex + 1) % videoData.length;
+
+    // Check if the next index is the first one, indicating that all videos have been played
+    if (nextIndex === 0) {
+      // Navigate back to the "Images" screen
+      navigation.navigate('Images');
+    } else {
+      // Play the next video
+      setCurrentVideoIndex(nextIndex);
+    }
   };
+
+  // Use useFocusEffect to reset currentVideoIndex when the component is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      setCurrentVideoIndex(0);
+    }, []),
+  );
 
   if (videoData.length === 0) {
     return null;

@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import React, {useEffect, useState, useRef} from 'react';
+import React, {useEffect, useState, useRef, useCallback} from 'react';
 import {
   StyleSheet,
   View,
@@ -43,36 +43,46 @@ const Images = ({navigation}) => {
   const [imagesFound, setImagesFound] = useState(true);
   const [displayedImages, setDisplayedImages] = useState([]);
   const [currentImagePath, setCurrentImagePath] = useState('');
+  const [scrollingTextHeight, setScrollingTextHeight] = useState(
+    showScrollingText ? hp(4) : 0,
+  );
+
   const staticText = 'WelcomeThinPc';
 
   const intervalIdRef = useRef(null);
-  useEffect(() => {
-    // Navigate to the 'Videos' screen when all images are displayed or no images are found
+  const scrollingTextRef = useRef(null);
+
+  const navigationTOVideos = useCallback(() => {
     if (displayedImages.length === imageData.length || !imagesFound) {
       navigation.navigate('Videos', {
         showScrollingText,
       });
     }
-  }, [displayedImages, imagesFound, navigation]);
+  }, [displayedImages, imageData, imagesFound, navigation, showScrollingText]);
+
+  useEffect(() => {
+    navigationTOVideos();
+  }, [navigationTOVideos]);
 
   useEffect(() => {
     const scrollText = () => {
       Animated.sequence([
         Animated.timing(animatedValue, {
           toValue: 1,
-          duration: 30000, // Set the duration to the desired value (30 seconds in this example)
+          duration: 30000,
           useNativeDriver: true,
         }),
         Animated.timing(animatedValue, {
           toValue: 0,
-          duration: 0, // Set duration to 0 to immediately reset to the initial position
+          duration: 0,
           useNativeDriver: true,
         }),
       ]).start(() => {
-        scrollText(); // Call scrollText again to restart the animation
+        // Reset the animated value to 0 when the animation completes
+        animatedValue.setValue(0);
+        scrollText();
       });
     };
-
     scrollText();
   }, [animatedValue, screenWidth]);
 
@@ -344,7 +354,8 @@ const Images = ({navigation}) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.imageContainer}>
+      <View
+        style={[styles.imageContainer, {marginBottom: -scrollingTextHeight}]}>
         {currentImagePath !== '' && (
           <TouchableOpacity onPress={handleImageClick}>
             <Image
@@ -356,7 +367,14 @@ const Images = ({navigation}) => {
         )}
       </View>
       {showScrollingText && (
-        <View style={styles.containerTicker}>
+        <View
+          ref={scrollingTextRef}
+          onLayout={event =>
+            setScrollingTextHeight(
+              showScrollingText ? event.nativeEvent.layout.height : 0,
+            )
+          }
+          style={styles.containerTicker}>
           <Animated.View
             style={[
               styles.tickerContainer,
@@ -430,6 +448,7 @@ const Images = ({navigation}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    zIndex: 0, // Set a lower zIndex for the container
   },
   imageContainer: {
     flex: 1,
@@ -438,6 +457,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    zIndex: 1, // Set a lower zIndex for the image
+    elevation: 1, // Ensure elevation is set to make the image appear above the scrolling text
   },
   checkboxContainer: {
     flexDirection: 'row',
@@ -458,20 +479,20 @@ const styles = StyleSheet.create({
   },
   containerTicker: {
     position: 'absolute',
-    bottom: 0,
+    bottom: hp(1),
     left: 0,
     right: 0,
-    height: hp(4),
     backgroundColor: 'black',
     overflow: 'hidden',
+    zIndex: 2, // Set a higher zIndex for the scrolling text
   },
   tickerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: wp(200),
+    width: '100%', // Set the width to 100%
   },
   tickerText: {
-    fontSize: 24,
+    fontSize: hp(2),
     color: 'green',
     fontWeight: 'bold',
   },

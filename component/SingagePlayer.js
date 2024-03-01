@@ -1,71 +1,108 @@
 /* eslint-disable prettier/prettier */
 import React, {useState, useEffect, useRef} from 'react';
 import {
-  StyleSheet,
   View,
+  StyleSheet,
   Image,
   Modal,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   Text,
+  Alert,
   Animated,
   Dimensions,
 } from 'react-native';
-import Video from 'react-native-video';
 import RNFS from 'react-native-fs';
+import Restart from 'react-native-restart';
 import CheckBox from 'react-native-checkbox';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from 'react-native-responsive-screen';
+import {check, PERMISSIONS, request, RESULTS} from 'react-native-permissions';
 
-const SignagePlayer = ({navigation}) => {
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Toast from 'react-native-toast-message';
+import Video from 'react-native-video';
+
+const MediaComponent = ({navigation}) => {
   const [mediaData, setMediaData] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [allMediaDisplayed, setAllMediaDisplayed] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [intervalTime, setIntervalTime] = useState('5');
+  const [intervalTime, setIntervalTime] = useState();
   const [permissionsGranted, setPermissionGranted] = useState(false);
   const animatedValue = useRef(new Animated.Value(0)).current;
   const [textLength, setTextLength] = useState(0);
   const [showScrollingText, setShowScrollingText] = useState(false);
   const screenWidth = Dimensions.get('window').width;
   const [modalClicked, setModalClicked] = useState(false);
-  const [textFromFile, setTextFromFile] = useState('');
-  const [videoEnded, setVideoEnded] = useState(false);
+  const [textFromFile, setTextFromFile] = useState('Welcome To ThinPC');
+  const [isVertical, setIsVertical] = useState(true);
+  const [mediaFound, setMediaFound] = useState(true);
+
   const intervalIdRef = useRef(null);
 
   useEffect(() => {
-    readTextFromFile();
-
-    const scrollText = () => {
-      Animated.sequence([
-        Animated.timing(animatedValue, {
-          toValue: 1,
-          duration: 15000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(animatedValue, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        scrollText();
-      });
+    const fetchDataAndStartLoop = async () => {
+      await requestStoragePermissionWrite();
+      setPermissionGranted(true);
+      await readTextFromFile();
+      await pickMediaFromDirectory();
+      console.log(permissionsGranted);
+      if (permissionsGranted) {
+        await requestStoragePermission();
+      }
     };
 
-    scrollText();
-  }, [animatedValue, screenWidth]);
+    fetchDataAndStartLoop();
+  }, [permissionsGranted]);
+
+  useEffect(() => {
+    pickMediaFromDirectory();
+  }, []);
+
+  useEffect(() => {
+    if (mediaData.length > 0) {
+      startMediaLoop(intervalTime);
+    } else {
+      setMediaFound(false);
+      console.log('No media files found.');
+    }
+  }, [mediaData, intervalTime, navigation]);
+
+  useEffect(() => {
+    const handleAppStart = async () => {
+      const savedIntervalTime = await AsyncStorage.getItem('intervalTime');
+      const saveScrollingText = await AsyncStorage.getItem('showScrollingText');
+      const how = saveScrollingText === 'true';
+      console.log(how, modalClicked, typeof how);
+      setShowScrollingText(how);
+
+      const initialIntervalTime = savedIntervalTime || '5';
+      console.log('initialInterValTIme: ', savedIntervalTime);
+      setIntervalTime(initialIntervalTime);
+      startMediaLoop(initialIntervalTime);
+    };
+
+    handleAppStart();
+  }, [modalClicked]);
 
   const readTextFromFile = async () => {
     try {
-      if (permissionsGranted) {
-        const filePath =
-          RNFS.ExternalStorageDirectoryPath + '/signage/ticker/ticker.txt';
-        const fileContent = await RNFS.readFile(filePath, 'utf8');
+      const tickerFolderPath =
+        RNFS.ExternalStorageDirectoryPath + '/signage/ticker/';
+      const filesInTickerFolder = await RNFS.readDir(tickerFolderPath);
+
+      if (filesInTickerFolder.length > 0) {
+        // Read the content of the first file in the "ticker" folder
+        const firstFilePath = filesInTickerFolder[0].path;
+        const fileContent = await RNFS.readFile(firstFilePath, 'utf8');
         setTextFromFile(fileContent);
+        console.log('File content:', fileContent);
+      } else {
+        console.warn('No files found in the "ticker" folder.');
       }
     } catch (error) {
       console.error('Error reading text from file:', error);
@@ -73,26 +110,116 @@ const SignagePlayer = ({navigation}) => {
   };
 
   useEffect(() => {
-    fetchDataAndStartLoop();
-  }, []);
-
-  useEffect(() => {
-    if (allMediaDisplayed) {
-      navigation.navigate('Videos');
+    if (showScrollingText) {
+      animateText();
     }
-  }, [allMediaDisplayed, navigation]);
+  }, [showScrollingText]);
 
-  const fetchDataAndStartLoop = async () => {
-    await requestStoragePermissionWrite();
-    setPermissionGranted(true);
-    await pickMediaFromDirectory();
-    if (permissionsGranted) {
-      await requestStoragePermission();
+  const animateText = () => {
+    Animated.loop(
+      Animated.timing(animatedValue, {
+        toValue: 1,
+        duration: 30000, // Adjust the duration as needed
+        useNativeDriver: true,
+      }),
+    ).start();
+  };
+
+  const requestStoragePermission = async () => {
+    try {
+      const permissionStatus = await check(
+        PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
+      );
+      const writePermissionStatus = await check(
+        PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE,
+      );
+
+      if (
+        permissionStatus !== RESULTS.GRANTED ||
+        writePermissionStatus !== RESULTS.GRANTED
+      ) {
+        const permissionRequestResult = await request(
+          PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
+          PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE,
+        );
+
+        if (
+          permissionRequestResult[0] !== RESULTS.GRANTED ||
+          permissionRequestResult[1] !== RESULTS.GRANTED
+        ) {
+          console.warn('Read or write storage permission not granted.');
+        }
+      }
+    } catch (error) {
+      console.error('Error checking or requesting storage permission:', error);
     }
-    const savedIntervalTime = await AsyncStorage.getItem('intervalTime');
-    const initialIntervalTime = savedIntervalTime || '5';
-    setIntervalTime(initialIntervalTime);
-    startMediaLoop(initialIntervalTime);
+  };
+
+  const requestStoragePermissionWrite = async () => {
+    try {
+      const permissionStatus = await check(
+        PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE,
+      );
+
+      if (permissionStatus !== RESULTS.GRANTED) {
+        const permissionRequestResult = await request(
+          PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE,
+        );
+
+        if (permissionRequestResult !== RESULTS.GRANTED) {
+          console.warn('Write storage permission not granted.');
+          Alert.alert(
+            'Permission Required',
+            'Please grant storage permission to use the app.',
+          );
+        } else {
+          console.log('Write storage permission granted.');
+          createFolders();
+        }
+      } else {
+        console.log('Write storage permission already granted.');
+        createFolders();
+      }
+    } catch (error) {
+      console.error('Error checking or requesting storage permission:', error);
+    }
+  };
+
+  const createFolders = async () => {
+    try {
+      const storagePath = RNFS.ExternalStorageDirectoryPath;
+      const mainFolderPath = `${storagePath}/signage`;
+
+      const isMainFolderExists = await RNFS.exists(mainFolderPath);
+
+      if (!isMainFolderExists) {
+        await RNFS.mkdir(mainFolderPath);
+        console.log('Main folder created successfully:', mainFolderPath);
+
+        const subfolders = ['image', 'video', 'audio', 'ticker'];
+        for (const subfolder of subfolders) {
+          const subfolderPath = `${mainFolderPath}/${subfolder}`;
+          const isSubfolderExists = await RNFS.exists(subfolderPath);
+
+          if (!isSubfolderExists) {
+            await RNFS.mkdir(subfolderPath);
+            console.log(
+              `Subfolder "${subfolder}" created successfully:`,
+              subfolderPath,
+            );
+          } else {
+            console.log(
+              `Subfolder "${subfolder}" already exists:`,
+              subfolderPath,
+            );
+          }
+        }
+      } else {
+        console.log('Main folder already exists:', mainFolderPath);
+      }
+    } catch (error) {
+      console.error('Error creating folders:', error);
+    }
   };
 
   const pickMediaFromDirectory = async () => {
@@ -107,17 +234,35 @@ const SignagePlayer = ({navigation}) => {
         'video',
       );
 
-      const imageDatas = imageFiles.map(file => ({
-        path: `file://${file.path}`,
-        isVideo: false,
-      }));
-      console.log(imageFiles);
-      const videoDatas = videoFiles.map(file => ({
-        path: `file://${file.path}`,
-        isVideo: true,
+      const mediaDatas = imageFiles.map(file => ({
+        type: 'image',
+        path: `file://${file.path}`, // Add 'file://' prefix
       }));
 
-      setMediaData([...imageDatas, ...videoDatas]);
+      mediaDatas.push(
+        ...videoFiles.map(file => ({
+          type: 'video',
+          path: `file://${file.path}`,
+        })),
+      );
+
+      if (mediaDatas.length > 0) {
+        setMediaData(mediaDatas);
+      } else {
+        setMediaFound(false);
+        Toast.show({
+          type: 'success',
+          position: 'top',
+          text1: 'No media files found in the directory.',
+          // text2: 'Please Remove the USB',
+          visibilityTime: 3000, // 3 seconds
+          autoHide: true,
+          topOffset: 30, // Adjust as needed
+          textStyle: {fontWeight: 'bold', fontSize: 150},
+          alignSelf: 'center',
+        });
+        console.error('No media files found in the directory.');
+      }
     } catch (error) {
       console.error('Error picking media from directory:', error);
     }
@@ -126,14 +271,15 @@ const SignagePlayer = ({navigation}) => {
   const startMediaLoop = initialIntervalTime => {
     if (mediaData.length > 0 && !isModalVisible) {
       stopMediaLoop();
-      setAllMediaDisplayed(false);
       intervalIdRef.current = setInterval(() => {
         setCurrentIndex(prevIndex => {
           const newIndex = (prevIndex + 1) % mediaData.length;
-          if (newIndex === 0) {
-            setAllMediaDisplayed(true);
+
+          if (!allMediaDisplayed) {
+            // If not all media displayed, update state accordingly
+            setAllMediaDisplayed(newIndex === 0);
           }
-          setVideoEnded(mediaData[newIndex].isVideo);
+
           return newIndex;
         });
       }, parseInt(initialIntervalTime, 10) * 1000);
@@ -154,45 +300,118 @@ const SignagePlayer = ({navigation}) => {
     startMediaLoop(intervalTime);
   };
 
-  const handleSaveIntervalTime = () => {
+  const handleSaveIntervalTime = async () => {
     setIsModalVisible(false);
     setModalClicked(true);
-    if (showScrollingText) {
-      startMediaLoop(intervalTime);
-    }
+
+    await AsyncStorage.setItem('intervalTime', intervalTime);
+    await AsyncStorage.setItem(
+      'showScrollingText',
+      showScrollingText.toString(),
+    );
+
+    setTimeout(() => {
+      Restart.Restart();
+    }, 500);
   };
+
+  const videoRef = useRef(null);
 
   useEffect(() => {
     AsyncStorage.setItem('intervalTime', intervalTime);
   }, [intervalTime]);
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.mediaContainer}>
-        {mediaData.length > 0 && (
-          <TouchableOpacity onPress={handleMediaClick}>
-            {mediaData[currentIndex].isVideo ? (
+  const renderMedia = () => {
+    if (mediaData.length > 0) {
+      const currentMedia = mediaData[currentIndex];
+
+      if (currentMedia) {
+        if (currentMedia.type === 'image') {
+          return (
+            <TouchableWithoutFeedback onPress={handleMediaClick}>
+              <View style={styles.mediaContainer}>
+                <Image
+                  key={currentMedia.path}
+                  source={{uri: currentMedia.path}}
+                  style={styles.media}
+                  resizeMode="contain"
+                />
+              </View>
+            </TouchableWithoutFeedback>
+          );
+        } else if (currentMedia.type === 'video') {
+          const videoSource = {uri: currentMedia.path};
+          return (
+            <TouchableWithoutFeedback onPress={handleMediaClick}>
               <Video
-                key={currentIndex}
-                source={{uri: mediaData[currentIndex].path}}
+                source={videoSource}
                 style={styles.media}
                 resizeMode="cover"
-                onEnd={() => setVideoEnded(true)}
-                muted={false}
+                onLoad={videoLoadHandler}
+                ref={videoRef} // Ref for the video component
               />
-            ) : (
-              <Image
-                key={currentIndex}
-                source={{uri: mediaData[currentIndex].path}}
-                style={styles.media}
-              />
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
+            </TouchableWithoutFeedback>
+          );
+        }
+      }
+    }
+  };
 
-      {modalClicked && showScrollingText && (
-        <View style={styles.containerTicker}>
+  const videoLoadHandler = details => {
+    const {duration} = details;
+
+    clearInterval(intervalIdRef.current);
+
+    intervalIdRef.current = setInterval(() => {
+      setCurrentIndex(prevIndex => {
+        const newIndex = (prevIndex + 1) % mediaData.length;
+
+        if (!allMediaDisplayed) {
+          // If not all media displayed, update state accordingly
+          setAllMediaDisplayed(newIndex === 0);
+        }
+
+        return newIndex;
+      });
+    }, duration * 1000); // Use video duration to switch to the next media
+  };
+
+  useEffect(() => {
+    const loadOrientationState = async () => {
+      try {
+        const storedOrientation = await AsyncStorage.getItem('isVertical');
+        if (storedOrientation !== null) {
+          setIsVertical(JSON.parse(storedOrientation));
+        }
+      } catch (error) {
+        console.error('Error loading orientation state:', error);
+      }
+    };
+
+    loadOrientationState();
+  }, []);
+
+  // Save orientation state to AsyncStorage whenever it changes
+  useEffect(() => {
+    const saveOrientationState = async () => {
+      try {
+        await AsyncStorage.setItem('isVertical', JSON.stringify(isVertical));
+      } catch (error) {
+        console.error('Error saving orientation state:', error);
+      }
+    };
+
+    saveOrientationState();
+  }, [isVertical]);
+  return (
+    <View
+      style={[
+        styles.container,
+        isVertical ? styles.vertical : styles.horizontal,
+      ]}>
+      {renderMedia()}
+      {showScrollingText && (
+        <View style={[styles.containerTicker]}>
           <Animated.View
             style={[
               styles.tickerContainer,
@@ -214,7 +433,7 @@ const SignagePlayer = ({navigation}) => {
                   setTextLength(event.nativeEvent.layout.width);
                 }
               }}>
-              {textFromFile || 'WelcomeThinPc'}
+              {textFromFile || 'Welcome To ThinPc'}
             </Text>
           </Animated.View>
         </View>
@@ -225,7 +444,11 @@ const SignagePlayer = ({navigation}) => {
         animationType="slide"
         transparent={true}
         onRequestClose={handleModalClose}>
-        <View style={styles.modalContainer}>
+        <View
+          style={[
+            styles.modalContainer,
+            isVertical ? null : styles.horizontal,
+          ]}>
           <View style={styles.modalContent}>
             <Text style={styles.titleText}>Media Change Duration</Text>
             <TextInput
@@ -233,13 +456,21 @@ const SignagePlayer = ({navigation}) => {
               placeholder="Enter interval time (in seconds)"
               keyboardType="numeric"
               value={intervalTime}
-              onChangeText={text => setIntervalTime(text)}
+              onChangeText={text => {
+                setIntervalTime(text);
+                console.log('interval time is ', text);
+              }}
             />
             <View style={styles.checkboxContainer}>
               <CheckBox
                 label="Show Scrolling Text"
                 checked={showScrollingText}
                 onChange={() => setShowScrollingText(!showScrollingText)}
+              />
+              <CheckBox
+                label="Vertical Orientation"
+                checked={isVertical}
+                onChange={() => setIsVertical(!isVertical)}
               />
             </View>
             <TouchableOpacity onPress={handleSaveIntervalTime}>
@@ -263,14 +494,12 @@ const SignagePlayer = ({navigation}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    zIndex: 0,
   },
-  mediaContainer: {
-    flex: 1,
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  media: {
+    width: '100%',
+    height: '100%',
+    zIndex: 1,
   },
   checkboxContainer: {
     flexDirection: 'row',
@@ -284,27 +513,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 10,
   },
-  media: {
-    width: '100%',
-    height: '100%',
-    zIndex: 1,
-  },
   containerTicker: {
     position: 'absolute',
-    bottom: 0,
+    bottom: hp(1),
     left: 0,
     right: 0,
-    height: hp(3),
     backgroundColor: 'black',
     overflow: 'hidden',
+    zIndex: 2,
   },
   tickerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: wp(200),
+    width: '100%',
   },
   tickerText: {
-    fontSize: 24,
+    fontSize: hp(2),
     color: 'green',
     fontWeight: 'bold',
   },
@@ -318,6 +542,16 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 10,
     elevation: 5,
+  },
+  mediaContainer: {
+    flex: 1,
+    backgroundColor: 'black', // Set the background color to black
+  },
+  vertical: {
+    flexDirection: 'row', // Apply vertical orientation
+  },
+  horizontal: {
+    flexDirection: 'column', // Apply horizontal orientation
   },
   input: {
     height: 40,
@@ -344,4 +578,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default SignagePlayer;
+export default MediaComponent;
