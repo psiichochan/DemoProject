@@ -2,21 +2,20 @@
 import React, {useEffect, useState, useRef} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createStackNavigator} from '@react-navigation/stack';
-import Images from './component/Images';
-import Videos from './component/Videos';
+
 import {NativeModules, ToastAndroid, NativeEventEmitter} from 'react-native';
 import Toast from 'react-native-toast-message';
-import ScrollingText from './component/ScrollingText';
+
 import DeviceInfo from 'react-native-device-info';
 import RNFS from 'react-native-fs';
 import Restart from 'react-native-restart';
-import MacAddressSending from './component/KeyCode/MacAddressSending';
 
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import NetInfo from '@react-native-community/netinfo';
 import MediaComponent from './component/SingagePlayer';
-
+import BlankScreen from './component/BlankScreen';
+import RNFetchBlob from 'rn-fetch-blob';
 const Stack = createStackNavigator();
 const USBModule = NativeModules.USBModule;
 const usbEvents = new NativeEventEmitter(USBModule);
@@ -30,13 +29,89 @@ if (!USBModule.addListener || !USBModule.removeListeners) {
 
 const App = () => {
   const [usbPath, setUsbPath] = useState('');
-  const [deviceId, setDeviceId] = useState(null); // Change initial state to null
+  const [deviceId, setDeviceId] = useState(null);
   const [deviceKey, setDeviceKey] = useState('');
-  console.log(deviceId);
+  const [signageChanges, setSignageChanges] = useState(false);
 
   const fetchDeviceIdCalledRef = useRef(false);
-  const sendDataToGoogleSheetCalledRef = useRef(false);
   const validateKeyCalledRef = useRef(false);
+
+  useEffect(() => {
+    const fetchIpAddress = async () => {
+      try {
+        const netInfo = await NetInfo.fetch();
+        const localIpAddress = netInfo.details.ipAddress;
+
+        ToastAndroid.showWithGravity(
+          `Device IP Address: ${localIpAddress}`,
+          ToastAndroid.LONG,
+          ToastAndroid.CENTER,
+        );
+
+        setTimeout(() => {
+          Toast.hide();
+        }, 5000);
+      } catch (error) {
+        console.error('Error fetching IP address:', error);
+      }
+    };
+
+    fetchIpAddress();
+  }, []);
+
+  const retrieveDeviceKey = async () => {
+    const storedDeviceKey = await AsyncStorage.getItem('deviceKey');
+    const values = JSON.stringify(storedDeviceKey);
+    validateKeyCalledRef.current = true;
+    if (storedDeviceKey) {
+      setDeviceKey(values);
+    }
+  };
+
+  useEffect(() => {
+    let watcher;
+
+    const watchSignageFolder = async () => {
+      const signageFolderPath = `${RNFetchBlob.fs.dirs.SDCardDir}/signage`;
+
+      console.log('Watching signage folder:', signageFolderPath);
+
+      watcher = await RNFetchBlob.fs.watch(signageFolderPath, {interval: 500});
+
+      watcher.onData = (eventType, filePath) => {
+        console.log('Signage folder has changed. Event type:', eventType);
+        console.log('Changed path:', filePath);
+
+        // Optional: Log additional details about the event
+        setSignageChanges(true);
+
+        // Restart the application
+        Restart.Restart();
+      };
+
+      watcher.onError = error => {
+        console.log('Error in the signage folder watcher:', error);
+      };
+
+      watcher.start();
+    };
+
+    watchSignageFolder();
+
+    return () => {
+      watcher && watcher.stop();
+    };
+  }, []);
+  useEffect(() => {
+    const checkSignageChanges = async () => {
+      if (signageChanges) {
+        // Perform any action you want when changes occur.
+        console.log('Signage folder has changed!');
+      }
+    };
+
+    checkSignageChanges();
+  }, [signageChanges]);
 
   const fetchDeviceId = async () => {
     try {
@@ -46,36 +121,40 @@ const App = () => {
       console.error('Error getting device ID:', error);
     }
   };
-  const currentIST1 = new Date().toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-  });
-  console.log(currentIST1);
 
   const sendDataToGoogleSheet = async () => {
     const apiUrl =
-      'https://script.google.com/macros/s/AKfycbwO3ObmJ9C1pVYHjiUPy8LIzdX6MvBzZKYCTA7S3lFidc9UKb8UcB6vXKBkRrqMGXI/exec'; // Replace with your deployed web app URL
+      'https://script.google.com/macros/s/AKfycbxjg6T9NMO11YZ_KLAGYnXLps63TAprbRFnIPKhCZ424Vvb1_NdykECg3meZSkhBokgtg/exec';
     const currentIST = new Date().toLocaleString('en-IN', {
       timeZone: 'Asia/Kolkata',
     });
+
     try {
       const data = {
         deviceId,
         timestamp: currentIST,
       };
-      console.log(data);
 
       const response = await axios.post(apiUrl, data);
-      console.log('Complete Response:', response);
+
+      // Check if response.data is an object
+      if (response.data && typeof response.data === 'object') {
+        console.log('Complete Response:', JSON.stringify(response.data));
+      } else {
+        console.log('Complete Response:', response.data);
+      }
+
       if (response.status === 200) {
         if (response.data && response.data.deviceKey) {
           const deviceKey1 = response.data.deviceKey;
-          console.log('Data sent to Google Sheet. Device Key:', deviceKey);
-          setDeviceKey(deviceKey1);
+          console.log('Data sent to Google Sheet. Device Key:', deviceKey1);
+          // setDeviceKey(deviceKey1);
+          await AsyncStorage.setItem('deviceKey', deviceKey1); // Store deviceKey in AsyncStorage
           console.log('API Call: ', deviceKey1);
         } else {
           console.error('Invalid response data:', response.data);
           ToastAndroid.showWithGravity(
-            'Invalid response data',
+            `${response.data}`,
             ToastAndroid.SHORT,
             ToastAndroid.CENTER,
           );
@@ -93,7 +172,7 @@ const App = () => {
     }
   };
 
-  const validateKey = () => {
+  const validateKey = async () => {
     if (deviceKey) {
       ToastAndroid.showWithGravity(
         'Device Key Is Validated',
@@ -107,71 +186,94 @@ const App = () => {
         ToastAndroid.CENTER,
       );
     }
+
+    // Update validateKeyCalledRef.current
+    validateKeyCalledRef.current = true;
+
+    // Persist the value in AsyncStorage
+    await AsyncStorage.setItem('validateKeyCalled', 'true');
   };
 
   useEffect(() => {
     const checkIfFunctionsCalled = async () => {
-      // Check if the functions have been called before
       const functionsCalled = await AsyncStorage.getItem('functionsCalled');
-      console.log('FunctionCalled: ', functionsCalled);
-      console.log('Hello: ', fetchDeviceIdCalledRef.current);
 
       if (functionsCalled !== 'true') {
-        // If not called before, call the functions
         if (!fetchDeviceIdCalledRef.current) {
           await fetchDeviceId();
           await sendDataToGoogleSheet();
           fetchDeviceIdCalledRef.current = true;
         }
-        // console.log('deviceID', sendDataToGoogleSheetCalledRef.current);
-        // if (deviceId && !sendDataToGoogleSheetCalledRef.current) {
-
-        //   sendDataToGoogleSheetCalledRef.current = true;
-        // }
 
         if (deviceId && !validateKeyCalledRef.current) {
           validateKey();
-          console.log('hello : ', deviceId);
           validateKeyCalledRef.current = true;
+          await AsyncStorage.setItem('validateKeyCalled', 'true'); // Persist the value
         }
 
-        // Set a flag in AsyncStorage indicating that the functions have been called
         await AsyncStorage.setItem('functionsCalled', 'true');
       }
+      retrieveDeviceKey();
     };
 
     checkIfFunctionsCalled();
   }, [deviceId]);
 
   useEffect(() => {
+    const loadPersistedValues = async () => {
+      const isValidateKeyCalled = await AsyncStorage.getItem(
+        'validateKeyCalled',
+      );
+      console.log(
+        'Retrieved value of validateKeyCalled from AsyncStorage:',
+        isValidateKeyCalled,
+      );
+      if (isValidateKeyCalled === 'true') {
+        validateKeyCalledRef.current = true;
+      }
+    };
+
+    loadPersistedValues();
+  }, []);
+
+  useEffect(() => {
+    console.log('Component mounted');
+
+    return () => {
+      console.log('Component unmounted');
+    };
+  }, []);
+
+  useEffect(() => {
+    console.log('Device ID effect triggered');
+    // Rest of the code for this effect...
+  }, [deviceId]);
+
+  useEffect(() => {
+    console.log('AsyncStorage initialization effect triggered');
+    // Rest of the code for this effect...
+  }, []);
+
+  useEffect(() => {
+    console.log('AsyncStorage update effect triggered');
+    // Rest of the code for this effect...
+  }, [validateKeyCalledRef.current]);
+
+  useEffect(() => {
     if (deviceId && !validateKeyCalledRef.current) {
       validateKey();
       validateKeyCalledRef.current = true;
+      AsyncStorage.setItem('validateKeyCalled', 'true'); // Persist the value
     }
   }, [deviceId]);
 
   useEffect(() => {
-    // Check if the necessary methods exist before creating the listener
     if (USBModule.addListener && USBModule.removeListeners) {
       const usbListener = usbEvents.addListener(
         'USBConnected',
         async connectedUsbPath => {
           setUsbPath(connectedUsbPath);
-
           await copyFolderFromUsb(connectedUsbPath);
-
-          // Display a toast message when USB drive is connected
-          // ToastAndroid.showWithGravity(
-          //   'Pendrive Is Connected. Now Copying the Data.',
-          //   ToastAndroid.SHORT,
-          //   ToastAndroid.CENTER,
-          //   StyleSheet.create({
-          //     text: {
-          //       fontSize: 18, // Change the font size as needed
-          //       fontWeight: 'bold', // Make the text bold
-          //     },
-          //   }),
-          // );
         },
       );
 
@@ -187,19 +289,16 @@ const App = () => {
 
   const copyFolderFromUsb = async usbPath1 => {
     try {
-      const sourcePath = `${usbPath1}/signage`; // Assuming "signage" folder is in the USB root
+      const sourcePath = `${usbPath1}/signage`;
       const destinationPath = `${RNFS.ExternalStorageDirectoryPath}/signage`;
 
-      // Check if the source path exists
       const sourceExists = await RNFS.exists(sourcePath);
       if (!sourceExists) {
         return;
       }
 
-      // Create the destination directory
       await RNFS.mkdir(destinationPath);
 
-      // Perform the recursive copy operation
       await copyRecursive(sourcePath, destinationPath);
 
       Toast.show({
@@ -207,17 +306,12 @@ const App = () => {
         position: 'top',
         text1: 'Data Copied Successfully',
         text2: 'Please Remove the USB',
-        visibilityTime: 3000, // 3 seconds
+        visibilityTime: 3000,
         autoHide: true,
-        topOffset: 30, // Adjust as needed
+        topOffset: 30,
         textStyle: {fontWeight: 'bold', fontSize: 20},
       });
       console.log('Please Remove the USB. Folder Copied Successful');
-      // ToastAndroid.showWithGravity(
-      //   'Please Remove the USB. Folder Copied Successful',
-      //   ToastAndroid.SHORT,
-      //   ToastAndroid.CENTER,
-      // );
       Restart.Restart();
     } catch (error) {
       console.error('Error copying signage folder:', error);
@@ -227,17 +321,14 @@ const App = () => {
   async function copyRecursive(source, destination) {
     console.log(`${source} => ${destination}`);
 
-    // Check if the destination folder exists
     const destinationExists = await RNFS.exists(destination);
     if (destinationExists) {
       console.log(`Deleting existing destination folder: ${destination}`);
       await RNFS.unlink(destination).catch(() => {});
     }
 
-    // Create the destination directory
     await RNFS.mkdir(destination);
 
-    // Read items from the source directory
     const items = await RNFS.readDir(source);
 
     await Promise.all(
@@ -253,40 +344,24 @@ const App = () => {
       }),
     );
   }
+
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="MediaComponent">
-        {/* <Stack.Screen
-          name="ActivationScreen"
-          component={ActivationScreen}
-          options={{headerShown: false}}
-        /> */}
-        <Stack.Screen
-          name="MediaComponent"
-          component={MediaComponent}
-          options={{headerShown: false}}
-        />
-        <Stack.Screen
-          name="Images"
-          component={Images}
-          options={{headerShown: false}}
-        />
-
-        <Stack.Screen
-          name="Macadress"
-          component={MacAddressSending}
-          options={{headerShown: false}}
-        />
-        <Stack.Screen
-          name="ScrollingText"
-          component={ScrollingText}
-          options={{headerShown: false}}
-        />
-        <Stack.Screen
-          name="Videos"
-          component={Videos}
-          options={{headerShown: false}}
-        />
+      <Stack.Navigator
+        initialRouteName={deviceKey ? 'MediaComponent' : 'BlankScreen'}>
+        {deviceKey !== null && validateKeyCalledRef.current ? (
+          <Stack.Screen
+            name="MediaComponent"
+            component={MediaComponent}
+            options={{headerShown: false}}
+          />
+        ) : (
+          <Stack.Screen
+            name="BlankScreen"
+            component={BlankScreen}
+            options={{headerShown: false}}
+          />
+        )}
       </Stack.Navigator>
       <Toast />
     </NavigationContainer>
