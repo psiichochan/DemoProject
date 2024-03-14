@@ -317,7 +317,6 @@ const MediaComponent = ({navigation}) => {
             const currentMedia = mediaData[newIndex];
             if (currentMedia.type === 'video') {
               videoRef.current?.seek(0);
-              videoRef.current?.pause();
             }
 
             return newIndex;
@@ -446,11 +445,13 @@ const MediaComponent = ({navigation}) => {
     saveOrientationState();
   }, [isVertical]);
 
+  console.log('IPADdress: ', ipAddress);
+
   return (
     <View
       style={[
         styles.container,
-        isVertical ? styles.vertical : styles.horizontal,
+        // isVertical ? styles.vertical : styles.horizontal,
       ]}>
       <View style={styles.ipAddressContainer}>
         <Text style={styles.ipAddressText1}>{ipAddress}</Text>
@@ -553,34 +554,38 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
   },
   containerTicker: {
     position: 'absolute',
     bottom: 0,
     backgroundColor: 'black',
     width: '100%',
+    height: hp(4),
   },
   tickerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    // paddingHorizontal: wp('2%'),
+    paddingHorizontal: wp(2),
   },
   tickerText: {
     color: 'white',
-    fontSize: hp('2'),
-    fontFamily: 'Roboto-Regular',
+    fontSize: hp(2),
+    // fontFamily: 'Roboto-Regular',
   },
   ipAddressContainer: {
     position: 'absolute',
-    top: 100,
+    top: 10, // Position at the top of the container
     backgroundColor: 'black',
-    paddingHorizontal: wp('2'),
-    paddingVertical: hp('0.5'),
+    paddingHorizontal: wp(1),
+
     borderRadius: 5,
+    right: wp(1),
+    zIndex: 1, // Ensure it appears above other content
   },
   ipAddressText1: {
     color: 'white',
-    fontSize: hp('1.5%'),
+    fontSize: hp(1),
     fontFamily: 'Roboto-Bold',
   },
   mediaContainer: {

@@ -124,7 +124,7 @@ const App = () => {
 
   const sendDataToGoogleSheet = async () => {
     const apiUrl =
-      'https://script.google.com/macros/s/AKfycbxjg6T9NMO11YZ_KLAGYnXLps63TAprbRFnIPKhCZ424Vvb1_NdykECg3meZSkhBokgtg/exec';
+      'https://script.google.com/macros/s/AKfycbz9FBo2vF3jCIjX9CE2emPm9WOiZf56pjzQZ2u7qKJuvejTF0JDjtkIic3stTsjmOXv/exec';
     const currentIST = new Date().toLocaleString('en-IN', {
       timeZone: 'Asia/Kolkata',
     });
