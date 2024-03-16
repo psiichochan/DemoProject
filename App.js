@@ -290,8 +290,8 @@ const App = () => {
   const copyFolderFromUsb = async usbPath1 => {
     try {
       const sourcePath = `${usbPath1}/signage`;
-      const destinationPath = `${RNFS.ExternalStorageDirectoryPath}/signage`;
-
+      const destinationPath = `${RNFS.ExternalDirectoryPath}/signage`;
+      console.log('desitinationPath: ', destinationPath);
       const sourceExists = await RNFS.exists(sourcePath);
       if (!sourceExists) {
         return;

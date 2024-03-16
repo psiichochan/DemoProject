@@ -12,6 +12,7 @@ import {
   Alert,
   Animated,
   Dimensions,
+  NativeModules,
 } from 'react-native';
 import RNFS from 'react-native-fs';
 import Restart from 'react-native-restart';
@@ -22,8 +23,7 @@ import {
   heightPercentageToDP as hp,
 } from 'react-native-responsive-screen';
 import {check, PERMISSIONS, request, RESULTS} from 'react-native-permissions';
-import {Image as RNImage} from 'react-native'; // Import Image as RNImage
-
+import FolderManagerModule from './FolderManagerModule';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import Video from 'react-native-video';
@@ -85,6 +85,7 @@ const MediaComponent = ({navigation}) => {
             } else {
               console.log('Write storage permission granted.');
               createFolders();
+              handleCreateFolders();
             }
           } else {
             console.log('Write storage permission already granted.');
@@ -209,17 +210,28 @@ const MediaComponent = ({navigation}) => {
       console.error('Error checking or requesting storage permission:', error);
     }
   };
+  // useEffect(() => {
+  //   FolderManager.createFolders();
+  // }, []);
+  const handleCreateFolders = () => {
+    FolderManagerModule.createFolders(); // Call the method to create folders
+  };
 
   const createFolders = async () => {
     try {
-      const storagePath = RNFS.ExternalStorageDirectoryPath;
+      const storagePath = RNFS.ExternalDirectoryPath;
       const mainFolderPath = `${storagePath}/signage`;
+      console.log('this is path: ', storagePath);
 
       const isMainFolderExists = await RNFS.exists(mainFolderPath);
 
       if (!isMainFolderExists) {
         await RNFS.mkdir(mainFolderPath);
-        console.log('Main folder created successfully:', mainFolderPath);
+
+        console.log(
+          'Main folder created successfully through react-native:',
+          mainFolderPath,
+        );
 
         const subfolders = ['image', 'video', 'audio', 'ticker'];
         for (const subfolder of subfolders) {
@@ -240,16 +252,19 @@ const MediaComponent = ({navigation}) => {
           }
         }
       } else {
-        console.log('Main folder already exists:', mainFolderPath);
+        console.log(
+          'Main folder already exists through react-native :',
+          mainFolderPath,
+        );
       }
     } catch (error) {
-      console.error('Error creating folders:', error);
+      console.error('Error creating folders through react-native:', error);
     }
   };
 
   const pickMediaFromDirectory = async () => {
     try {
-      const mediaDirectoryPath = RNFS.ExternalStorageDirectoryPath;
+      const mediaDirectoryPath = RNFS.ExternalDirectoryPath;
       const imageFiles = await RNFS.readDir(
         `${mediaDirectoryPath}/signage/image/`,
         'image',
@@ -480,7 +495,7 @@ const MediaComponent = ({navigation}) => {
                   setTextLength(event.nativeEvent.layout.width);
                 }
               }}>
-              {textFromFile || 'Welcome To ThinPc'}
+              {textFromFile || 'Welcome To Signage'}
             </Text>
           </Animated.View>
         </View>
