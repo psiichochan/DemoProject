@@ -43,9 +43,9 @@ const MediaComponent = ({navigation}) => {
   const [modalClicked, setModalClicked] = useState(false);
   const [textFromFile, setTextFromFile] = useState('Welcome To ThinPC');
   const [isVertical, setIsVertical] = useState(true);
-  const [mediaFound, setMediaFound] = useState(true);
   const [ipAddress, setIpAddress] = useState('');
   const [scrollSpeed, setScrollSpeed] = useState('10'); // Initial value set to 10 seconds
+  const [selectAnimation, setSelectAnimation] = useState('left');
 
   const intervalIdRef = useRef(null);
 
@@ -119,7 +119,6 @@ const MediaComponent = ({navigation}) => {
     if (mediaData.length > 0) {
       startMediaLoop(intervalTime);
     } else {
-      setMediaFound(false);
       console.log('No media files found.');
     }
   }, [mediaData, intervalTime, navigation, startMediaLoop]);
@@ -289,7 +288,6 @@ const MediaComponent = ({navigation}) => {
       if (mediaDatas.length > 0) {
         setMediaData(mediaDatas);
       } else {
-        setMediaFound(false);
         Toast.show({
           type: 'success',
           position: 'top',
@@ -307,14 +305,6 @@ const MediaComponent = ({navigation}) => {
     }
   };
 
-  const preloadNextImage = useCallback(() => {
-    const nextIndex = (currentIndex + 1) % mediaData.length;
-    const nextMedia = mediaData[nextIndex];
-
-    if (nextMedia && nextMedia.type === 'image') {
-      FastImage.preload([{uri: nextMedia.path}]);
-    }
-  }, [currentIndex, mediaData]);
   const startMediaLoop = useCallback(
     initialIntervalTime => {
       if (mediaData.length > 0 && !isModalVisible) {
@@ -327,8 +317,6 @@ const MediaComponent = ({navigation}) => {
               setAllMediaDisplayed(newIndex === 0);
             }
 
-            preloadNextImage();
-
             const currentMedia = mediaData[newIndex];
             if (currentMedia.type === 'video') {
               videoRef.current?.seek(0);
@@ -339,7 +327,7 @@ const MediaComponent = ({navigation}) => {
         }, parseInt(initialIntervalTime, 10) * 1000);
       }
     },
-    [mediaData, isModalVisible, allMediaDisplayed, preloadNextImage],
+    [mediaData, isModalVisible, allMediaDisplayed],
   );
 
   const stopMediaLoop = () => {
@@ -387,11 +375,9 @@ const MediaComponent = ({navigation}) => {
           return (
             <TouchableWithoutFeedback onPress={handleMediaClick}>
               <View style={styles.mediaContainer}>
-                <FastImage
+                <Image
                   source={{uri: currentMedia.path}}
                   style={styles.media}
-                  resizeMode={FastImage.resizeMode.cover}
-                  onLoad={preloadNextImage}
                   key={currentMedia.path}
                 />
               </View>
@@ -460,17 +446,12 @@ const MediaComponent = ({navigation}) => {
     saveOrientationState();
   }, [isVertical]);
 
-  console.log('IPADdress: ', ipAddress);
-
   return (
     <View
       style={[
         styles.container,
         // isVertical ? styles.vertical : styles.horizontal,
       ]}>
-      <View style={styles.ipAddressContainer}>
-        <Text style={styles.ipAddressText1}>{ipAddress}</Text>
-      </View>
       {renderMedia()}
       {showScrollingText && (
         <View style={[styles.containerTicker]}>
@@ -544,7 +525,85 @@ const MediaComponent = ({navigation}) => {
                   onChange={() => setShowScrollingText(!showScrollingText)}
                 />
               </View>
+              <View style={styles.animationContainer}>
+                <Text style={styles.modalLabel}>Animation Direction : </Text>
+                <View style={styles.buttonContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.directionButton,
+                      selectAnimation === 'random' && styles.selectedButton,
+                    ]}
+                    onPress={() => setSelectAnimation('random')}>
+                    <Text
+                      style={[
+                        styles.buttonText,
+                        selectAnimation === 'random' &&
+                          styles.selectedButtonText,
+                      ]}>
+                      Random
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.directionButton,
+                      selectAnimation === 'left' && styles.selectedButton,
+                    ]}
+                    onPress={() => setSelectAnimation('left')}>
+                    <Text
+                      style={[
+                        styles.buttonText,
+                        selectAnimation === 'left' && styles.selectedButtonText,
+                      ]}>
+                      Left
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.directionButton,
+                      selectAnimation === 'right' && styles.selectedButton,
+                    ]}
+                    onPress={() => setSelectAnimation('right')}>
+                    <Text
+                      style={[
+                        styles.buttonText,
+                        selectAnimation === 'right' &&
+                          styles.selectedButtonText,
+                      ]}>
+                      Right
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.directionButton,
+                      selectAnimation === 'up' && styles.selectedButton,
+                    ]}
+                    onPress={() => setSelectAnimation('up')}>
+                    <Text
+                      style={[
+                        styles.buttonText,
+                        selectAnimation === 'up' && styles.selectedButtonText,
+                      ]}>
+                      Up
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.directionButton,
+                      selectAnimation === 'down' && styles.selectedButton,
+                    ]}
+                    onPress={() => setSelectAnimation('down')}>
+                    <Text
+                      style={[
+                        styles.buttonText,
+                        selectAnimation === 'down' && styles.selectedButtonText,
+                      ]}>
+                      Down
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
+
             <View style={styles.modalFooter}>
               <TouchableOpacity
                 style={styles.modalButton}
@@ -578,6 +637,34 @@ const styles = StyleSheet.create({
     width: '100%',
     height: hp(4),
   },
+  selectedButton: {
+    backgroundColor: '#343434',
+  },
+  selectedButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  directionButton: {
+    padding: 10,
+    margin: 5,
+    backgroundColor: '#ddd',
+    borderRadius: 5,
+  },
+  buttonText: {
+    fontSize: 16,
+    color: 'black',
+    fontWeight: '700',
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  animationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
   tickerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -586,7 +673,6 @@ const styles = StyleSheet.create({
   tickerText: {
     color: 'white',
     fontSize: hp(2),
-    // fontFamily: 'Roboto-Regular',
   },
   ipAddressContainer: {
     position: 'absolute',
@@ -611,9 +697,9 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   media: {
-    flex: 1,
     width: '100%',
     height: '100%',
+    resizeMode: 'cover',
   },
   modalContainer: {
     flex: 1,
@@ -646,6 +732,8 @@ const styles = StyleSheet.create({
   modalLabel: {
     fontSize: 18,
     fontFamily: 'Roboto-Bold',
+    fontWeight: 'bold',
+    color: 'black',
   },
   modalInput: {
     marginTop: 5,
