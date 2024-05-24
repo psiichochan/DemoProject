@@ -9,7 +9,7 @@ import Toast from 'react-native-toast-message';
 import DeviceInfo from 'react-native-device-info';
 import RNFS from 'react-native-fs';
 import Restart from 'react-native-restart';
-
+import {AppState} from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
@@ -69,39 +69,72 @@ const App = () => {
   };
 
   useEffect(() => {
-    let watcher;
+    const signageFolderPath = `${RNFS.ExternalDirectoryPath}/signage`;
 
-    const watchSignageFolder = async () => {
-      const signageFolderPath = `${RNFetchBlob.fs.dirs.SDCardDir}/signage`;
+    const watchDirectory = async () => {
+      try {
+        // Read the contents of the directory initially
+        const files = await RNFS.readDir(`${signageFolderPath}/image/`);
+        console.log('files hello: ', files);
+        const video = await RNFS.readDir(`${signageFolderPath}/video/`);
+        const audio = await RNFS.readDir(`${signageFolderPath}/audio/`);
+        const ticker = await RNFS.readDir(`${signageFolderPath}/ticker/`);
 
-      console.log('Watching signage folder:', signageFolderPath);
+        // Start a timer to periodically check for changes
+        const timerId = setInterval(async () => {
+          try {
+            const imageFiles = await RNFS.readDir(
+              `${signageFolderPath}/image/`,
+            );
+            const videoFiles = await RNFS.readDir(
+              `${signageFolderPath}/video/`,
+            );
+            const audioFiles = await RNFS.readDir(
+              `${signageFolderPath}/audio/`,
+            );
+            const tickerFiles = await RNFS.readDir(
+              `${signageFolderPath}/ticker/`,
+            );
 
-      watcher = await RNFetchBlob.fs.watch(signageFolderPath, {interval: 500});
+            const hello = imageFiles.length !== files.length;
+            const hello2 = videoFiles.length !== video.length;
+            console.log('hello is : ', imageFiles.length, files.length, hello);
 
-      watcher.onData = (eventType, filePath) => {
-        console.log('Signage folder has changed. Event type:', eventType);
-        console.log('Changed path:', filePath);
+            console.log(
+              'hello2 is : ',
+              videoFiles.length,
+              video.length,
+              hello2,
+            );
 
-        // Optional: Log additional details about the event
-        setSignageChanges(true);
+            // Compare the updated files with the previous ones
+            if (
+              imageFiles.length !== files.length ||
+              !imageFiles.every((f, i) => f.name === files[i].name) ||
+              videoFiles.length !== video.length ||
+              !videoFiles.every((f, i) => f.name === video[i].name) ||
+              audioFiles.length !== audio.length ||
+              !audioFiles.every((f, i) => f.name === audio[i].name) ||
+              tickerFiles.length !== ticker.length ||
+              !tickerFiles.every((f, i) => f.name === ticker[i].name)
+            ) {
+              // Directory has changed
 
-        // Restart the application
-        Restart.Restart();
-      };
+              Restart.restart(); // Restart the application
+            }
+          } catch (error) {
+            console.error('Error reading directory:', error);
+          }
+        }, 60000); // Check every second for changes
 
-      watcher.onError = error => {
-        console.log('Error in the signage folder watcher:', error);
-      };
-
-      watcher.start();
+        return () => clearInterval(timerId); // Cleanup the timer
+      } catch (error) {
+        console.error('Error watching directory:', error);
+      }
     };
-
-    watchSignageFolder();
-
-    return () => {
-      watcher && watcher.stop();
-    };
+    watchDirectory();
   }, []);
+
   useEffect(() => {
     const checkSignageChanges = async () => {
       if (signageChanges) {
