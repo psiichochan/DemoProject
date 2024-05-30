@@ -1,6 +1,6 @@
 /* eslint-disable prettier/prettier */
-import React, {useEffect, useState, useRef} from 'react';
-import {NavigationContainer} from '@react-navigation/native';
+import React, {useEffect, useState, useRef, useCallback} from 'react';
+import {NavigationContainer, DefaultTheme} from '@react-navigation/native';
 import {createStackNavigator} from '@react-navigation/stack';
 
 import {NativeModules, ToastAndroid, NativeEventEmitter} from 'react-native';
@@ -9,13 +9,11 @@ import Toast from 'react-native-toast-message';
 import DeviceInfo from 'react-native-device-info';
 import RNFS from 'react-native-fs';
 import Restart from 'react-native-restart';
-import {AppState} from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import MediaComponent from './component/SingagePlayer';
 import BlankScreen from './component/BlankScreen';
-import RNFetchBlob from 'rn-fetch-blob';
 const Stack = createStackNavigator();
 const USBModule = NativeModules.USBModule;
 const usbEvents = new NativeEventEmitter(USBModule);
@@ -28,10 +26,10 @@ if (!USBModule.addListener || !USBModule.removeListeners) {
 }
 
 const App = () => {
-  const [usbPath, setUsbPath] = useState('');
   const [deviceId, setDeviceId] = useState(null);
   const [deviceKey, setDeviceKey] = useState('');
-  const [signageChanges, setSignageChanges] = useState(false);
+
+  var signageChanges = false;
 
   const fetchDeviceIdCalledRef = useRef(false);
   const validateKeyCalledRef = useRef(false);
@@ -142,7 +140,6 @@ const App = () => {
         console.log('Signage folder has changed!');
       }
     };
-
     checkSignageChanges();
   }, [signageChanges]);
 
@@ -155,7 +152,7 @@ const App = () => {
     }
   };
 
-  const sendDataToGoogleSheet = async () => {
+  const sendDataToGoogleSheet = useCallback(async () => {
     const apiUrl =
       'https://script.google.com/macros/s/AKfycbz9FBo2vF3jCIjX9CE2emPm9WOiZf56pjzQZ2u7qKJuvejTF0JDjtkIic3stTsjmOXv/exec';
     const currentIST = new Date().toLocaleString('en-IN', {
@@ -203,9 +200,9 @@ const App = () => {
     } catch (error) {
       console.error('Error sending data to Google Sheet:', error);
     }
-  };
+  }, [deviceId]);
 
-  const validateKey = async () => {
+  const validateKey = useCallback(async () => {
     if (deviceKey) {
       ToastAndroid.showWithGravity(
         'Device Key Is Validated',
@@ -225,7 +222,7 @@ const App = () => {
 
     // Persist the value in AsyncStorage
     await AsyncStorage.setItem('validateKeyCalled', 'true');
-  };
+  }, [deviceKey]);
 
   useEffect(() => {
     const checkIfFunctionsCalled = async () => {
@@ -250,7 +247,7 @@ const App = () => {
     };
 
     checkIfFunctionsCalled();
-  }, [deviceId]);
+  }, [deviceId, sendDataToGoogleSheet, validateKey]);
 
   useEffect(() => {
     const loadPersistedValues = async () => {
@@ -278,34 +275,18 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    console.log('Device ID effect triggered');
-    // Rest of the code for this effect...
-  }, [deviceId]);
-
-  useEffect(() => {
-    console.log('AsyncStorage initialization effect triggered');
-    // Rest of the code for this effect...
-  }, []);
-
-  useEffect(() => {
-    console.log('AsyncStorage update effect triggered');
-    // Rest of the code for this effect...
-  }, [validateKeyCalledRef.current]);
-
-  useEffect(() => {
     if (deviceId && !validateKeyCalledRef.current) {
       validateKey();
       validateKeyCalledRef.current = true;
       AsyncStorage.setItem('validateKeyCalled', 'true'); // Persist the value
     }
-  }, [deviceId]);
+  }, [deviceId, validateKey]);
 
   useEffect(() => {
     if (USBModule.addListener && USBModule.removeListeners) {
       const usbListener = usbEvents.addListener(
         'USBConnected',
         async connectedUsbPath => {
-          setUsbPath(connectedUsbPath);
           await copyFolderFromUsb(connectedUsbPath);
         },
       );
@@ -318,40 +299,42 @@ const App = () => {
         'USBModule does not have the required methods for event subscription and unsubscription.',
       );
     }
-  }, []);
+  }, [copyFolderFromUsb]);
 
-  const copyFolderFromUsb = async usbPath1 => {
-    try {
-      const sourcePath = `${usbPath1}/signage`;
-      const destinationPath = `${RNFS.ExternalDirectoryPath}/signage`;
-      console.log('desitinationPath: ', destinationPath);
-      const sourceExists = await RNFS.exists(sourcePath);
-      if (!sourceExists) {
-        return;
+  const copyFolderFromUsb = useCallback(
+    async usbPath1 => {
+      try {
+        const sourcePath = `${usbPath1}/signage`;
+        const destinationPath = `${RNFS.ExternalDirectoryPath}/signage`;
+        const sourceExists = await RNFS.exists(sourcePath);
+        if (!sourceExists) {
+          return;
+        }
+
+        await RNFS.mkdir(destinationPath);
+
+        await copyRecursive(sourcePath, destinationPath);
+
+        Toast.show({
+          type: 'success',
+          position: 'top',
+          text1: 'Data Copied Successfully',
+          text2: 'Please Remove the USB',
+          visibilityTime: 3000,
+          autoHide: true,
+          topOffset: 30,
+          textStyle: {fontWeight: 'bold', fontSize: 20},
+        });
+        console.log('Please Remove the USB. Folder Copied Successful');
+        Restart.Restart();
+      } catch (error) {
+        console.error('Error copying signage folder:', error);
       }
+    },
+    [copyRecursive],
+  );
 
-      await RNFS.mkdir(destinationPath);
-
-      await copyRecursive(sourcePath, destinationPath);
-
-      Toast.show({
-        type: 'success',
-        position: 'top',
-        text1: 'Data Copied Successfully',
-        text2: 'Please Remove the USB',
-        visibilityTime: 3000,
-        autoHide: true,
-        topOffset: 30,
-        textStyle: {fontWeight: 'bold', fontSize: 20},
-      });
-      console.log('Please Remove the USB. Folder Copied Successful');
-      Restart.Restart();
-    } catch (error) {
-      console.error('Error copying signage folder:', error);
-    }
-  };
-
-  async function copyRecursive(source, destination) {
+  const copyRecursive = useCallback(async (source, destination) => {
     console.log(`${source} => ${destination}`);
 
     const destinationExists = await RNFS.exists(destination);
@@ -369,17 +352,24 @@ const App = () => {
         const destinationPath = `${destination}/${item.name}`;
 
         if (item.isFile()) {
-          console.log(`Copying file: ${item.path}`);
           await RNFS.copyFile(item.path, destinationPath);
         } else {
           await copyRecursive(item.path, destinationPath);
         }
       }),
     );
-  }
+  }, []);
+
+  const MyTheme = {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      background: 'black',
+    },
+  };
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={MyTheme}>
       <Stack.Navigator
         initialRouteName={deviceKey ? 'MediaComponent' : 'BlankScreen'}>
         {deviceKey !== null && validateKeyCalledRef.current ? (

@@ -27,9 +27,9 @@ const BlankScreen = () => {
   return (
     <View style={styles.container}>
       <Text style={styles.text}>
-        You are out of licensed. Purchase the key from 9029000029
+        You are out of licensed. Purchase the key.
       </Text>
-      <Text style={[styles.text, {top: 50}]}>Device Id: {deviceId} </Text>
+      <Text style={[styles.text, {top: 50}]}>Device Id: {deviceId}</Text>
     </View>
   );
 };
