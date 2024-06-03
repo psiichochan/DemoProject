@@ -28,9 +28,7 @@ if (!USBModule.addListener || !USBModule.removeListeners) {
 const App = () => {
   const [deviceId, setDeviceId] = useState(null);
   const [deviceKey, setDeviceKey] = useState('');
-
   var signageChanges = false;
-
   const fetchDeviceIdCalledRef = useRef(false);
   const validateKeyCalledRef = useRef(false);
 
@@ -338,7 +336,9 @@ const App = () => {
     console.log(`${source} => ${destination}`);
 
     const destinationExists = await RNFS.exists(destination);
-    if (destinationExists) {
+    const mergeContain = await AsyncStorage.getItem('mergeContain');
+    console.log('mergeContainer: ', mergeContain);
+    if (destinationExists && !mergeContain) {
       console.log(`Deleting existing destination folder: ${destination}`);
       await RNFS.unlink(destination).catch(() => {});
     }

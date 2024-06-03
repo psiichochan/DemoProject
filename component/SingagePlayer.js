@@ -36,6 +36,9 @@ const MediaComponent = ({navigation}) => {
   // const [selectedValue, setSelectedValue] = useState('option1');
   const [textLength, setTextLength] = useState(0);
   const [showScrollingText, setShowScrollingText] = useState(false);
+  const [stretchImage, setStretchImage] = useState(false);
+  const [resizeModes, setResizeMode] = useState('');
+  const [merge, setMerge] = useState(false);
   const screenWidth = Dimensions.get('window').width;
   const screenHeight = Dimensions.get('window').height;
   const [modalClicked, setModalClicked] = useState(false);
@@ -124,9 +127,15 @@ const MediaComponent = ({navigation}) => {
       const savedIntervalTime = await AsyncStorage.getItem('intervalTime');
       const savedScrollSpeed = await AsyncStorage.getItem('scrollSpeed');
       const saveScrollingText = await AsyncStorage.getItem('showScrollingText');
+      const stretchedImage = await AsyncStorage.getItem('stretchImages');
+      const heyThere = await AsyncStorage.getItem('mergeContain');
+      const heypublic = heyThere === 'true';
       const how = saveScrollingText === 'true';
       console.log('savedScrollSpeed', savedScrollSpeed);
       setShowScrollingText(how);
+      setResizeMode(heyThere);
+      setMerge(heypublic);
+
       const initialIntervalTime = savedIntervalTime || '5';
       const initialScrollSpeed = savedScrollSpeed || '10';
       console.log('initialInterValTIme: ', savedIntervalTime);
@@ -421,6 +430,8 @@ const MediaComponent = ({navigation}) => {
       'showScrollingText',
       showScrollingText.toString(),
     );
+    await AsyncStorage.setItem('stretchImages', stretchImage.toString());
+    await AsyncStorage.setItem('mergeContain', merge.toString());
 
     setTimeout(() => {
       Restart.Restart();
@@ -496,6 +507,22 @@ const MediaComponent = ({navigation}) => {
                   style={styles.checkBox}
                   checked={showScrollingText}
                   onChange={() => setShowScrollingText(!showScrollingText)}
+                />
+              </View>
+              {/* <View style={styles.modalRow}>
+                <Text style={styles.modalLabel}>Image Stretch: </Text>
+                <CheckBox
+                  style={styles.checkBox}
+                  checked={stretchImage}
+                  onChange={() => setStretchImage(!stretchImage)}
+                />
+              </View> */}
+              <View style={styles.modalRow}>
+                <Text style={styles.modalLabel}>Merge Contain: </Text>
+                <CheckBox
+                  style={styles.checkBox}
+                  checked={merge}
+                  onChange={() => setMerge(!merge)}
                 />
               </View>
               <View>
