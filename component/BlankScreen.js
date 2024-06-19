@@ -22,8 +22,6 @@ const BlankScreen = () => {
     hello();
   }, []);
 
-  console.log(deviceId);
-
   return (
     <View style={styles.container}>
       <Text style={styles.text}>

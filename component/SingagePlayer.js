@@ -11,6 +11,7 @@ import {
   Animated,
   Dimensions,
   StatusBar,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import RNFS from 'react-native-fs';
 import Restart from 'react-native-restart';
@@ -28,22 +29,18 @@ import NetInfo from '@react-native-community/netinfo';
 const MediaComponent = ({navigation}) => {
   const [mediaData, setMediaData] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  // const [allMediaDisplayed, setAllMediaDisplayed] = useState(false);
+  const [allMediaDisplayed, setAllMediaDisplayed] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [intervalTime, setIntervalTime] = useState();
   const [permissionsGranted, setPermissionGranted] = useState(false);
   const animatedValue = useRef(new Animated.Value(0)).current;
-  // const [selectedValue, setSelectedValue] = useState('option1');
   const [textLength, setTextLength] = useState(0);
   const [showScrollingText, setShowScrollingText] = useState(false);
-  const [stretchImage, setStretchImage] = useState(false);
-  const [resizeModes, setResizeMode] = useState('');
   const [merge, setMerge] = useState(false);
   const screenWidth = Dimensions.get('window').width;
   const screenHeight = Dimensions.get('window').height;
   const [modalClicked, setModalClicked] = useState(false);
   const [textFromFile, setTextFromFile] = useState('Welcome To ThinPC');
-  // const [isVertical, setIsVertical] = useState(true);
   const [ipAddress, setIpAddress] = useState('');
   const [scrollSpeed, setScrollSpeed] = useState('10');
   const [selectAnimation, setSelectAnimation] = useState('');
@@ -116,29 +113,27 @@ const MediaComponent = ({navigation}) => {
 
   useEffect(() => {
     if (mediaData.length > 0) {
-      startMediaLoop(intervalTime);
-    } else {
-      console.log('No media files found.');
+      if (mediaData.length === 1 && mediaData[0].type === 'video') {
+        videoRef.current?.seek(0);
+      } else {
+        startMediaLoop(intervalTime);
+      }
     }
-  }, [mediaData, intervalTime, navigation, startMediaLoop]);
+  }, [mediaData, intervalTime, navigation, startMediaLoop, startVideoLoop]);
 
   useEffect(() => {
     const handleAppStart = async () => {
       const savedIntervalTime = await AsyncStorage.getItem('intervalTime');
       const savedScrollSpeed = await AsyncStorage.getItem('scrollSpeed');
       const saveScrollingText = await AsyncStorage.getItem('showScrollingText');
-      const stretchedImage = await AsyncStorage.getItem('stretchImages');
       const heyThere = await AsyncStorage.getItem('mergeContain');
       const heypublic = heyThere === 'true';
       const how = saveScrollingText === 'true';
-      console.log('savedScrollSpeed', savedScrollSpeed);
       setShowScrollingText(how);
-      setResizeMode(heyThere);
       setMerge(heypublic);
 
       const initialIntervalTime = savedIntervalTime || '5';
       const initialScrollSpeed = savedScrollSpeed || '10';
-      console.log('initialInterValTIme: ', savedIntervalTime);
       setIntervalTime(initialIntervalTime);
       setScrollSpeed(initialScrollSpeed);
       startMediaLoop(initialIntervalTime);
@@ -148,8 +143,7 @@ const MediaComponent = ({navigation}) => {
 
   const readTextFromFile = async () => {
     try {
-      const tickerFolderPath =
-        RNFS.ExternalStorageDirectoryPath + '/signage/ticker/';
+      const tickerFolderPath = RNFS.ExternalDirectoryPath + '/signage/ticker/';
       const filesInTickerFolder = await RNFS.readDir(tickerFolderPath);
       const animationAfter = await AsyncStorage.getItem('animation');
 
@@ -158,7 +152,6 @@ const MediaComponent = ({navigation}) => {
         const firstFilePath = filesInTickerFolder[0].path;
         const fileContent = await RNFS.readFile(firstFilePath, 'utf8');
         setTextFromFile(fileContent);
-        console.log('File content:', fileContent);
       } else {
         console.warn('No files found in the "ticker" folder.');
       }
@@ -173,11 +166,12 @@ const MediaComponent = ({navigation}) => {
       Animated.loop(
         Animated.timing(animatedValue, {
           toValue: 1,
-          duration: parseInt(scrollSpeed, 10) * 1000,
+          duration: parseInt(scrollSpeed, 10) * 1000, // Use scrollSpeed
           useNativeDriver: true,
         }),
       ).start();
     };
+
     if (showScrollingText) {
       animateText();
     }
@@ -219,24 +213,15 @@ const MediaComponent = ({navigation}) => {
     try {
       const storagePath = RNFS.ExternalDirectoryPath;
       const mainFolderPath = `${storagePath}/signage`;
-      console.log('this is path: ', storagePath);
       const isMainFolderExists = await RNFS.exists(mainFolderPath);
       if (!isMainFolderExists) {
         await RNFS.mkdir(mainFolderPath);
-        console.log(
-          'Main folder created successfully through react-native:',
-          mainFolderPath,
-        );
         const subfolders = ['image', 'video', 'audio', 'ticker'];
         for (const subfolder of subfolders) {
           const subfolderPath = `${mainFolderPath}/${subfolder}`;
           const isSubfolderExists = await RNFS.exists(subfolderPath);
           if (!isSubfolderExists) {
             await RNFS.mkdir(subfolderPath);
-            console.log(
-              `Subfolder "${subfolder}" created successfully:`,
-              subfolderPath,
-            );
           } else {
             console.log(
               `Subfolder "${subfolder}" already exists:`,
@@ -264,33 +249,60 @@ const MediaComponent = ({navigation}) => {
       const videoFiles = await RNFS.readDir(
         `${mediaDirectoryPath}/signage/video/`,
       );
-      const mediaDatas = [...imageFiles, ...videoFiles];
+      const mediaDatas = imageFiles.map(file => ({
+        type: 'image',
+        path: `file://${file.path}`,
+      }));
+
+      mediaDatas.push(
+        ...videoFiles.map(file => ({
+          type: 'video',
+          path: `file://${file.path}`,
+        })),
+      );
       setMediaData(mediaDatas);
-      console.log(mediaDatas);
     } catch (error) {
       console.error('Error picking media from directory:', error);
     }
   };
 
   const startMediaLoop = useCallback(
-    // eslint-disable-next-line no-shadow
-    intervalTime => {
-      if (intervalIdRef.current) {
-        clearInterval(intervalIdRef.current);
+    initialIntervalTime => {
+      if (mediaData.length > 0 && !isModalVisible) {
+        stopMediaLoop();
+        intervalIdRef.current = setInterval(() => {
+          setCurrentIndex(prevIndex => {
+            const newIndex = (prevIndex + 1) % mediaData.length;
+
+            const currentMedia = mediaData[newIndex];
+            if (currentMedia.type === 'video') {
+              videoRef.current?.seek(0);
+            }
+
+            return newIndex;
+          });
+        }, parseInt(initialIntervalTime, 10) * 1000);
       }
-      const intervalDuration = parseInt(intervalTime, 10) * 1000;
-      intervalIdRef.current = setInterval(() => {
-        setCurrentIndex(prevIndex => {
-          const nextIndex = (prevIndex + 1) % mediaData.length;
-          return nextIndex;
-        });
-      }, intervalDuration);
-      return () => {
-        clearInterval(intervalIdRef.current);
-      };
     },
-    [mediaData.length],
+    [mediaData, isModalVisible],
   );
+
+  const startVideoLoop = useCallback(
+    duration => {
+      if (mediaData.length === 1 && mediaData[0].type === 'video') {
+        stopMediaLoop();
+        intervalIdRef.current = setInterval(() => {
+          setCurrentIndex(0);
+          videoRef.current?.seek(0);
+        }, duration * 1000);
+      }
+    },
+    [mediaData],
+  );
+
+  const stopMediaLoop = () => {
+    clearInterval(intervalIdRef.current);
+  };
 
   useEffect(() => {
     if (mediaData.length > 0) {
@@ -378,20 +390,7 @@ const MediaComponent = ({navigation}) => {
   const renderMedia = () => {
     const currentMedia = mediaData[currentIndex];
     if (currentMedia) {
-      const mediaExtension = currentMedia.name.split('.').pop().toLowerCase();
-      if (mediaExtension === 'mp4') {
-        return (
-          <Video
-            key={currentMedia.path}
-            ref={videoRef}
-            source={{uri: `file://${currentMedia.path}`}}
-            style={styles.backgroundVideo}
-            resizeMode="contain"
-            onEnd={handleVideoEnd}
-            repeat={false}
-          />
-        );
-      } else {
+      if (currentMedia.type === 'image') {
         return (
           <AnimatedTouchable
             style={[styles.mediaContainer, getAnimationStyle()]}
@@ -405,6 +404,21 @@ const MediaComponent = ({navigation}) => {
             />
           </AnimatedTouchable>
         );
+      } else if (currentMedia.type === 'video') {
+        const videoSource = {uri: currentMedia.path};
+        return (
+          <TouchableWithoutFeedback onPress={handleMediaClick}>
+            <Video
+              key={currentMedia.path}
+              ref={videoRef}
+              source={videoSource}
+              style={styles.backgroundVideo}
+              resizeMode="contain"
+              onLoad={videoLoadHandler}
+              repeat={false}
+            />
+          </TouchableWithoutFeedback>
+        );
       }
     } else {
       console.log('No media found.');
@@ -412,11 +426,31 @@ const MediaComponent = ({navigation}) => {
     }
   };
 
-  const handleVideoEnd = () => {
-    setCurrentIndex(prevIndex => {
-      const nextIndex = (prevIndex + 1) % mediaData.length;
-      return nextIndex;
-    });
+  const handleMediaClick = () => {
+    setIsModalVisible(true);
+    stopMediaLoop();
+  };
+
+  const videoLoadHandler = details => {
+    const {duration} = details;
+
+    if (mediaData.length === 1 && mediaData[0].type === 'video') {
+      startVideoLoop(duration);
+    } else {
+      clearInterval(intervalIdRef.current);
+
+      intervalIdRef.current = setInterval(() => {
+        setCurrentIndex(prevIndex => {
+          const newIndex = (prevIndex + 1) % mediaData.length;
+
+          if (!allMediaDisplayed) {
+            setAllMediaDisplayed(newIndex === 0);
+          }
+
+          return newIndex;
+        });
+      }, duration * 1000);
+    }
   };
 
   const handleSaveIntervalTime = async () => {
@@ -430,7 +464,6 @@ const MediaComponent = ({navigation}) => {
       'showScrollingText',
       showScrollingText.toString(),
     );
-    await AsyncStorage.setItem('stretchImages', stretchImage.toString());
     await AsyncStorage.setItem('mergeContain', merge.toString());
 
     setTimeout(() => {
@@ -448,23 +481,32 @@ const MediaComponent = ({navigation}) => {
       <StatusBar hidden />
       {renderMedia()}
       {showScrollingText && (
-        <Animated.View
-          style={[
-            styles.scrollingTextContainer,
-            {
-              transform: [
-                {
-                  translateX: animatedValue.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [screenWidth, -textLength],
-                  }),
-                },
-              ],
-            },
-          ]}
-          onLayout={event => setTextLength(event.nativeEvent.layout.width)}>
-          <Text style={styles.scrollingText}>{textFromFile}</Text>
-        </Animated.View>
+        <View style={[styles.containerTicker]}>
+          <Animated.View
+            style={[
+              styles.tickerContainer,
+              {
+                transform: [
+                  {
+                    translateX: animatedValue.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [screenWidth, -textLength - screenWidth],
+                    }),
+                  },
+                ],
+              },
+            ]}>
+            <Text
+              style={styles.tickerText}
+              onLayout={event => {
+                if (textLength === 0) {
+                  setTextLength(event.nativeEvent.layout.width);
+                }
+              }}>
+              {textFromFile || 'Welcome To ThinPc'}
+            </Text>
+          </Animated.View>
+        </View>
       )}
       <Modal
         animationType="slide"
@@ -475,7 +517,7 @@ const MediaComponent = ({navigation}) => {
           <View style={styles.modalContent}>
             <View style={styles.modalBody}>
               <View style={styles.modalRow}>
-                <Text style={styles.modalLabel}>Interval Time (sec)</Text>
+                <Text style={styles.modalLabel}>Interval Time (sec): </Text>
                 <TextInput
                   style={styles.modalInput}
                   value={intervalTime}
@@ -484,7 +526,7 @@ const MediaComponent = ({navigation}) => {
                 />
               </View>
               <View style={styles.modalRow}>
-                <Text style={styles.modalLabel}>Scroll Speed (sec)</Text>
+                <Text style={styles.modalLabel}>Scroll Speed (sec): </Text>
                 <TextInput
                   style={styles.modalInput}
                   value={scrollSpeed}
@@ -493,7 +535,7 @@ const MediaComponent = ({navigation}) => {
                 />
               </View>
               <View style={styles.modalRow}>
-                <Text style={styles.modalLabel}>IP Address</Text>
+                <Text style={styles.modalLabel}>IP Address: </Text>
                 <TextInput
                   style={styles.modalInput}
                   value={ipAddress}
@@ -502,21 +544,14 @@ const MediaComponent = ({navigation}) => {
                 />
               </View>
               <View style={styles.modalRow}>
-                <Text style={styles.modalLabel}>Show Scrolling Text</Text>
+                <Text style={styles.modalLabel}>Show Scrolling Text: </Text>
                 <CheckBox
                   style={styles.checkBox}
                   checked={showScrollingText}
                   onChange={() => setShowScrollingText(!showScrollingText)}
                 />
               </View>
-              {/* <View style={styles.modalRow}>
-                <Text style={styles.modalLabel}>Image Stretch: </Text>
-                <CheckBox
-                  style={styles.checkBox}
-                  checked={stretchImage}
-                  onChange={() => setStretchImage(!stretchImage)}
-                />
-              </View> */}
+
               <View style={styles.modalRow}>
                 <Text style={styles.modalLabel}>Merge Contain: </Text>
                 <CheckBox
@@ -525,12 +560,9 @@ const MediaComponent = ({navigation}) => {
                   onChange={() => setMerge(!merge)}
                 />
               </View>
-              <View>
-                <Text style={styles.modalLabel}>Split Screen</Text>
-              </View>
 
               <View style={styles.modalRow}>
-                <Text style={styles.modalLabel}>Animation Direction</Text>
+                <Text style={styles.modalLabel}>Animation Direction: </Text>
                 <View style={styles.buttonContainer}>
                   <TouchableOpacity
                     style={[
@@ -592,6 +624,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  containerTicker: {
+    position: 'absolute',
+    bottom: 0,
+    backgroundColor: 'white',
+    width: '100%',
+    height: hp(4),
+  },
+  tickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(2),
+  },
+  tickerText: {
+    color: 'black',
+    fontSize: hp(2),
+  },
   image: {
     width: '100%',
     height: '100%',
@@ -652,7 +700,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Roboto-Bold',
     color: 'black',
     fontWeight: 'bold',
-    // alignItems: 'center',
+
     alignContent: 'space-between',
   },
   modalFooter: {

@@ -2,10 +2,8 @@
 import React, {useEffect, useState, useRef, useCallback} from 'react';
 import {NavigationContainer, DefaultTheme} from '@react-navigation/native';
 import {createStackNavigator} from '@react-navigation/stack';
-
 import {NativeModules, ToastAndroid, NativeEventEmitter} from 'react-native';
 import Toast from 'react-native-toast-message';
-
 import DeviceInfo from 'react-native-device-info';
 import RNFS from 'react-native-fs';
 import Restart from 'react-native-restart';
@@ -71,7 +69,6 @@ const App = () => {
       try {
         // Read the contents of the directory initially
         const files = await RNFS.readDir(`${signageFolderPath}/image/`);
-        console.log('files hello: ', files);
         const video = await RNFS.readDir(`${signageFolderPath}/video/`);
         const audio = await RNFS.readDir(`${signageFolderPath}/audio/`);
         const ticker = await RNFS.readDir(`${signageFolderPath}/ticker/`);
@@ -92,17 +89,6 @@ const App = () => {
               `${signageFolderPath}/ticker/`,
             );
 
-            const hello = imageFiles.length !== files.length;
-            const hello2 = videoFiles.length !== video.length;
-            console.log('hello is : ', imageFiles.length, files.length, hello);
-
-            console.log(
-              'hello2 is : ',
-              videoFiles.length,
-              video.length,
-              hello2,
-            );
-
             // Compare the updated files with the previous ones
             if (
               imageFiles.length !== files.length ||
@@ -114,8 +100,6 @@ const App = () => {
               tickerFiles.length !== ticker.length ||
               !tickerFiles.every((f, i) => f.name === ticker[i].name)
             ) {
-              // Directory has changed
-
               Restart.restart(); // Restart the application
             }
           } catch (error) {
@@ -175,10 +159,8 @@ const App = () => {
       if (response.status === 200) {
         if (response.data && response.data.deviceKey) {
           const deviceKey1 = response.data.deviceKey;
-          console.log('Data sent to Google Sheet. Device Key:', deviceKey1);
-          // setDeviceKey(deviceKey1);
+
           await AsyncStorage.setItem('deviceKey', deviceKey1); // Store deviceKey in AsyncStorage
-          console.log('API Call: ', deviceKey1);
         } else {
           console.error('Invalid response data:', response.data);
           ToastAndroid.showWithGravity(
@@ -252,10 +234,7 @@ const App = () => {
       const isValidateKeyCalled = await AsyncStorage.getItem(
         'validateKeyCalled',
       );
-      console.log(
-        'Retrieved value of validateKeyCalled from AsyncStorage:',
-        isValidateKeyCalled,
-      );
+
       if (isValidateKeyCalled === 'true') {
         validateKeyCalledRef.current = true;
       }
@@ -323,7 +302,6 @@ const App = () => {
           topOffset: 30,
           textStyle: {fontWeight: 'bold', fontSize: 20},
         });
-        console.log('Please Remove the USB. Folder Copied Successful');
         Restart.Restart();
       } catch (error) {
         console.error('Error copying signage folder:', error);
@@ -337,9 +315,7 @@ const App = () => {
 
     const destinationExists = await RNFS.exists(destination);
     const mergeContain = await AsyncStorage.getItem('mergeContain');
-    console.log('mergeContainer: ', mergeContain);
     if (destinationExists && !mergeContain) {
-      console.log(`Deleting existing destination folder: ${destination}`);
       await RNFS.unlink(destination).catch(() => {});
     }
 
@@ -352,6 +328,7 @@ const App = () => {
         const destinationPath = `${destination}/${item.name}`;
 
         if (item.isFile()) {
+          console.log(`Copying file: ${item.path}`);
           await RNFS.copyFile(item.path, destinationPath);
         } else {
           await copyRecursive(item.path, destinationPath);
