@@ -12,12 +12,10 @@ import {
   Alert,
   Animated,
   Dimensions,
-  NativeModules,
 } from 'react-native';
 import RNFS from 'react-native-fs';
 import Restart from 'react-native-restart';
 import CheckBox from 'react-native-checkbox';
-import FastImage from 'react-native-fast-image';
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
@@ -41,7 +39,7 @@ const MediaComponent = ({navigation}) => {
   const [showScrollingText, setShowScrollingText] = useState(false);
   const screenWidth = Dimensions.get('window').width;
   const [modalClicked, setModalClicked] = useState(false);
-  const [textFromFile, setTextFromFile] = useState('Welcome To ThinPC');
+  const [textFromFile, setTextFromFile] = useState('');
   const [isVertical, setIsVertical] = useState(true);
   const [ipAddress, setIpAddress] = useState('');
   const [scrollSpeed, setScrollSpeed] = useState('10'); // Initial value set to 10 seconds
@@ -145,8 +143,7 @@ const MediaComponent = ({navigation}) => {
 
   const readTextFromFile = async () => {
     try {
-      const tickerFolderPath =
-        RNFS.ExternalStorageDirectoryPath + '/signage/ticker/';
+      const tickerFolderPath = RNFS.ExternalDirectoryPath + '/signage/ticker/';
       const filesInTickerFolder = await RNFS.readDir(tickerFolderPath);
 
       if (filesInTickerFolder.length > 0) {
@@ -154,7 +151,6 @@ const MediaComponent = ({navigation}) => {
         const firstFilePath = filesInTickerFolder[0].path;
         const fileContent = await RNFS.readFile(firstFilePath, 'utf8');
         setTextFromFile(fileContent);
-        console.log('File content:', fileContent);
       } else {
         console.warn('No files found in the "ticker" folder.');
       }
@@ -169,7 +165,7 @@ const MediaComponent = ({navigation}) => {
       Animated.loop(
         Animated.timing(animatedValue, {
           toValue: 1,
-          duration: parseInt(scrollSpeed, 10) * 1000, // Use scrollSpeed
+          duration: parseInt(scrollSpeed, 20) * 1000, // Use scrollSpeed
           useNativeDriver: true,
         }),
       ).start();
@@ -209,9 +205,7 @@ const MediaComponent = ({navigation}) => {
       console.error('Error checking or requesting storage permission:', error);
     }
   };
-  // useEffect(() => {
-  //   FolderManager.createFolders();
-  // }, []);
+
   const handleCreateFolders = () => {
     FolderManagerModule.createFolders(); // Call the method to create folders
   };
@@ -305,33 +299,34 @@ const MediaComponent = ({navigation}) => {
     }
   };
 
-  const startMediaLoop = useCallback(
-    initialIntervalTime => {
-      if (mediaData.length > 0 && !isModalVisible) {
-        stopMediaLoop();
+  const startMediaLoop = useCallback(() => {
+    if (mediaData.length > 0 && !isModalVisible) {
+      stopMediaLoop();
+
+      // Check if there's only one media item and it's a video
+      if (mediaData.length === 1 && mediaData[0].type === 'video') {
+        // If only one video, let it loop by setting the onEnd callback
+        setCurrentIndex(0);
+        setAllMediaDisplayed(true); // Set to true since all media is displayed
+      } else {
+        // For multiple media items, use intervalTime
         intervalIdRef.current = setInterval(() => {
           setCurrentIndex(prevIndex => {
             const newIndex = (prevIndex + 1) % mediaData.length;
-
             if (!allMediaDisplayed) {
               setAllMediaDisplayed(newIndex === 0);
             }
-
-            const currentMedia = mediaData[newIndex];
-            if (currentMedia.type === 'video') {
-              videoRef.current?.seek(0);
-            }
-
             return newIndex;
           });
-        }, parseInt(initialIntervalTime, 10) * 1000);
+        }, parseInt(intervalTime, 10) * 1000);
       }
-    },
-    [mediaData, isModalVisible, allMediaDisplayed],
-  );
+    }
+  }, [mediaData, isModalVisible, intervalTime, allMediaDisplayed]);
 
   const stopMediaLoop = () => {
-    clearInterval(intervalIdRef.current);
+    if (intervalIdRef.current) {
+      clearInterval(intervalIdRef.current);
+    }
   };
 
   const handleMediaClick = () => {
@@ -384,15 +379,24 @@ const MediaComponent = ({navigation}) => {
             </TouchableWithoutFeedback>
           );
         } else if (currentMedia.type === 'video') {
-          const videoSource = {uri: currentMedia.path};
           return (
             <TouchableWithoutFeedback onPress={handleMediaClick}>
               <Video
-                source={videoSource}
+                source={{uri: currentMedia.path}}
                 style={styles.media}
                 resizeMode="cover"
                 onLoad={videoLoadHandler}
                 ref={videoRef}
+                repeat={true} // This will loop the video
+                onEnd={() => {
+                  if (mediaData.length === 1) {
+                    videoRef.current?.seek(0); // Seek to the start if only one video
+                  } else {
+                    setCurrentIndex(
+                      prevIndex => (prevIndex + 1) % mediaData.length,
+                    );
+                  }
+                }}
               />
             </TouchableWithoutFeedback>
           );
@@ -403,21 +407,32 @@ const MediaComponent = ({navigation}) => {
 
   const videoLoadHandler = details => {
     const {duration} = details;
+    console.log('video duration: ', duration);
 
-    clearInterval(intervalIdRef.current);
+    if (mediaData.length === 1 && mediaData[0].type === 'video') {
+      // If only one video, set the interval based on video length
 
-    intervalIdRef.current = setInterval(() => {
-      setCurrentIndex(prevIndex => {
-        const newIndex = (prevIndex + 1) % mediaData.length;
-
-        if (!allMediaDisplayed) {
-          setAllMediaDisplayed(newIndex === 0);
-        }
-
-        return newIndex;
-      });
-    }, duration * 1000);
+      clearInterval(intervalIdRef.current);
+      intervalIdRef.current = setInterval(() => {
+        videoRef.current?.seek(0); // Restart the video
+      }, duration * 1000); // Using video duration in milliseconds
+    } else {
+      // Regular case: use the duration from the `intervalTime` state
+      clearInterval(intervalIdRef.current);
+      intervalIdRef.current = setInterval(() => {
+        setCurrentIndex(prevIndex => (prevIndex + 1) % mediaData.length);
+      }, parseInt(duration, 10) * 1000);
+    }
   };
+  useEffect(() => {
+    if (!isModalVisible) {
+      startMediaLoop(intervalTime);
+    }
+
+    return () => {
+      clearInterval(intervalIdRef.current); // Cleanup on component unmount or when dependencies change
+    };
+  }, [intervalTime, mediaData, isModalVisible, startMediaLoop]);
 
   useEffect(() => {
     const loadOrientationState = async () => {
@@ -476,7 +491,7 @@ const MediaComponent = ({navigation}) => {
                   setTextLength(event.nativeEvent.layout.width);
                 }
               }}>
-              {textFromFile || 'Welcome To Signage'}
+              {textFromFile}
             </Text>
           </Animated.View>
         </View>
@@ -491,7 +506,7 @@ const MediaComponent = ({navigation}) => {
           <View style={styles.modalContent}>
             <View style={styles.modalBody}>
               <View style={styles.modalRow}>
-                <Text style={styles.modalLabel}>Interval Time (sec)</Text>
+                <Text style={styles.modalLabel}>Interval Time (sec) : </Text>
                 <TextInput
                   style={styles.modalInput}
                   value={intervalTime}
@@ -500,7 +515,7 @@ const MediaComponent = ({navigation}) => {
                 />
               </View>
               <View style={styles.modalRow}>
-                <Text style={styles.modalLabel}>Scroll Speed (sec)</Text>
+                <Text style={styles.modalLabel}>Scroll Speed (sec) : </Text>
                 <TextInput
                   style={styles.modalInput}
                   value={scrollSpeed}
@@ -509,7 +524,7 @@ const MediaComponent = ({navigation}) => {
                 />
               </View>
               <View style={styles.modalRow}>
-                <Text style={styles.modalLabel}>IP Address</Text>
+                <Text style={styles.modalLabel}>IP Address : </Text>
                 <TextInput
                   style={styles.modalInput}
                   value={ipAddress}
@@ -518,7 +533,7 @@ const MediaComponent = ({navigation}) => {
                 />
               </View>
               <View style={styles.modalRow}>
-                <Text style={styles.modalLabel}>Show Scrolling Text</Text>
+                <Text style={styles.modalLabel}>Show Scrolling Text : </Text>
                 <CheckBox
                   label="Show Scrolling Text"
                   checked={showScrollingText}
@@ -699,7 +714,6 @@ const styles = StyleSheet.create({
   media: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
   modalContainer: {
     flex: 1,
