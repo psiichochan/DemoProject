@@ -627,7 +627,7 @@ const styles = StyleSheet.create({
   containerTicker: {
     position: 'absolute',
     bottom: 0,
-    backgroundColor: 'white',
+    backgroundColor: 'black',
     width: '100%',
     height: hp(4),
   },
@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: wp(2),
   },
   tickerText: {
-    color: 'black',
+    color: 'white',
     fontSize: hp(2),
   },
   image: {
