@@ -281,10 +281,13 @@ const App = () => {
   }, [deviceId, validateKey]);
 
   useEffect(() => {
+    console.log('Component mounted2');
     if (USBModule.addListener && USBModule.removeListeners) {
+      console.log('Component mounted3');
       const usbListener = usbEvents.addListener(
         'USBConnected',
         async connectedUsbPath => {
+          console.log('Pendrive is connected>>>>>>>>>>');
           await copyFolderFromUsb(connectedUsbPath);
         },
       );
@@ -306,9 +309,9 @@ const App = () => {
         const destinationPath = `${RNFS.ExternalDirectoryPath}/signage`;
         console.log('desitinationPath: ', destinationPath);
         const sourceExists = await RNFS.exists(sourcePath);
-        if (!sourceExists) {
-          return;
-        }
+        // if (!sourceExists) {
+        //   return;
+        // }
 
         await RNFS.mkdir(destinationPath);
 
@@ -334,10 +337,12 @@ const App = () => {
   );
 
   const copyRecursive = useCallback(async (source, destination) => {
-    console.log(`${source} => ${destination}`);
+    console.log(`${source} =sdf> ${destination}`);
 
     const destinationExists = await RNFS.exists(destination);
-    if (destinationExists) {
+    const mergeContain = await AsyncStorage.getItem('mergeContain');
+
+    if (destinationExists && !mergeContain) {
       console.log(`Deleting existing destination folder: ${destination}`);
       await RNFS.unlink(destination).catch(() => {});
     }
