@@ -11,6 +11,7 @@ import {
   Animated,
   Dimensions,
   TouchableWithoutFeedback,
+  Easing,
 } from 'react-native';
 import RNFS from 'react-native-fs';
 import Restart from 'react-native-restart';
@@ -161,22 +162,22 @@ const MediaComponent = ({navigation}) => {
     }
   }, [textFromFile]);
 
-  useEffect(() => {
-    const animateText = () => {
-      console.log('scroll', scrollSpeed);
+  const animateText = useCallback(() => {
+    if (showScrollingText) {
       Animated.loop(
         Animated.timing(animatedValue, {
           toValue: 1,
-          duration: parseInt(scrollSpeed, 20) * 1000, // Use scrollSpeed
+          duration: parseInt(scrollSpeed, 10) * 1000, // Correctly using scrollSpeed for duration
           useNativeDriver: true,
+          easing: Easing.linear, // Ensure the scroll is smooth
         }),
       ).start();
-    };
-
-    if (showScrollingText) {
-      animateText();
     }
-  }, [animatedValue, showScrollingText, scrollSpeed]);
+  }, [animatedValue, scrollSpeed, showScrollingText]);
+
+  useEffect(() => {
+    animateText();
+  }, [scrollSpeed, textFromFile, showScrollingText, animateText]);
 
   const requestStoragePermission = async () => {
     try {
@@ -488,7 +489,7 @@ const MediaComponent = ({navigation}) => {
     <View style={styles.container}>
       {renderMedia()}
       {showScrollingText && (
-        <View style={[styles.containerTicker]}>
+        <View style={styles.containerTicker}>
           <Animated.View
             style={[
               styles.tickerContainer,
@@ -497,7 +498,7 @@ const MediaComponent = ({navigation}) => {
                   {
                     translateX: animatedValue.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [screenWidth, -textLength - screenWidth],
+                      outputRange: [screenWidth, -textLength],
                     }),
                   },
                 ],
