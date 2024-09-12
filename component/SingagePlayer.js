@@ -296,7 +296,6 @@ const MediaComponent = ({navigation}) => {
           } else if (currentMedia.type === 'image') {
             // For images, use the specified interval
             nextIntervalTime = intervalTime || 5; // efault interval for images is 5 seconds
-            console.log('Image interval time: ', nextIntervalTime);
           } else {
             console.log('NextInterval Time: ', nextIntervalTime);
           }
@@ -507,6 +506,20 @@ const MediaComponent = ({navigation}) => {
       Restart.Restart();
     }, 500);
   };
+  useEffect(() => {
+    const loadAnimationDirection = async () => {
+      try {
+        const savedAnimation = await AsyncStorage.getItem('animation');
+        if (savedAnimation !== null) {
+          setSelectAnimation(savedAnimation);
+        }
+      } catch (e) {
+        console.error('Failed to load the animation direction.');
+      }
+    };
+
+    loadAnimationDirection();
+  }, []);
 
   useEffect(() => {
     return () => stopMediaLoop(); // Clear the interval when the component unmounts
