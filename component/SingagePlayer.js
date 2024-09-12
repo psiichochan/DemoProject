@@ -12,6 +12,8 @@ import {
   Dimensions,
   TouchableWithoutFeedback,
   Easing,
+  StatusBar,
+  Image,
 } from 'react-native';
 import RNFS from 'react-native-fs';
 import Restart from 'react-native-restart';
@@ -39,11 +41,12 @@ const MediaComponent = ({navigation}) => {
   const [merge, setMerge] = useState(false);
   const screenWidth = Dimensions.get('window').width;
   const screenHeight = Dimensions.get('window').height;
+
   const [modalClicked, setModalClicked] = useState(false);
   const [textFromFile, setTextFromFile] = useState('');
   const [ipAddress, setIpAddress] = useState('');
   const [scrollSpeed, setScrollSpeed] = useState('10');
-  const [selectAnimation, setSelectAnimation] = useState('');
+  const [selectAnimation, setSelectAnimation] = useState('right');
   const intervalIdRef = useRef(null);
   const videoRef = useRef(null);
   const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
@@ -99,7 +102,6 @@ const MediaComponent = ({navigation}) => {
       setPermissionGranted(true);
       await readTextFromFile();
       await pickMediaFromDirectory();
-      console.log(permissionsGranted);
       if (permissionsGranted) {
         await requestStoragePermission();
       }
@@ -124,20 +126,22 @@ const MediaComponent = ({navigation}) => {
   useEffect(() => {
     const handleAppStart = async () => {
       const savedIntervalTime = await AsyncStorage.getItem('intervalTime');
-      const savedScrollSpeed = await AsyncStorage.getItem('scrollSpeed');
+      const savedScrollSpeed = await AsyncStorage.getItem('scrollSpeed'); // Add this line
       const saveScrollingText = await AsyncStorage.getItem('showScrollingText');
+      const how = saveScrollingText === 'true';
       const heyThere = await AsyncStorage.getItem('mergeContain');
       const heypublic = heyThere === 'true';
-      const how = saveScrollingText === 'true';
       setShowScrollingText(how);
       setMerge(heypublic);
 
       const initialIntervalTime = savedIntervalTime || '5';
-      const initialScrollSpeed = savedScrollSpeed || '10';
+      const initialScrollSpeed = savedScrollSpeed || '10'; // Set default scrolling speed to 10 seconds
+      console.log('initialInterValTIme: ', savedIntervalTime);
       setIntervalTime(initialIntervalTime);
-      setScrollSpeed(initialScrollSpeed);
+      setScrollSpeed(initialScrollSpeed); // Set the scrolling speed
       startMediaLoop(initialIntervalTime);
     };
+
     handleAppStart();
   }, [modalClicked, startMediaLoop]);
 
@@ -163,15 +167,19 @@ const MediaComponent = ({navigation}) => {
   }, [textFromFile]);
 
   const animateText = useCallback(() => {
-    if (showScrollingText) {
-      Animated.loop(
-        Animated.timing(animatedValue, {
-          toValue: 1,
-          duration: parseInt(scrollSpeed, 10) * 1000, // Correctly using scrollSpeed for duration
-          useNativeDriver: true,
-          easing: Easing.linear, // Ensure the scroll is smooth
-        }),
-      ).start();
+    try {
+      if (showScrollingText) {
+        Animated.loop(
+          Animated.timing(animatedValue, {
+            toValue: 1,
+            duration: parseInt(scrollSpeed, 10) * 1000, // Correctly using scrollSpeed for duration
+            useNativeDriver: true,
+            easing: Easing.linear, // Ensure the scroll is smooth
+          }),
+        ).start();
+      }
+    } catch (error) {
+      console.error('An error occurred:', error);
     }
   }, [animatedValue, scrollSpeed, showScrollingText]);
 
@@ -273,24 +281,53 @@ const MediaComponent = ({navigation}) => {
       // Clear any existing interval
       stopMediaLoop();
 
-      // If only one media item, handle video separately
-      if (mediaData.length === 1 && mediaData[0].type === 'video') {
-        setCurrentIndex(0);
-        setAllMediaDisplayed(true); // Set to true since all media displayed
-      } else {
-        // Start the loop with the correct interval time
-        const interval = intervalTime === undefined ? '5' : intervalTime;
-        console.log('this is interval only : ', interval);
-        intervalIdRef.current = setInterval(() => {
-          setCurrentIndex(prevIndex => {
-            const newIndex = (prevIndex + 1) % mediaData.length;
-            if (!allMediaDisplayed) {
-              setAllMediaDisplayed(newIndex === 0);
-            }
-            return newIndex;
-          });
-        }, parseInt(interval, 10) * 1000); // Use the correct interval time
-      }
+      const handleMediaSwitch = () => {
+        setCurrentIndex(prevIndex => {
+          const newIndex = (prevIndex + 1) % mediaData.length;
+          const currentMedia = mediaData[newIndex];
+
+          // Handle interval for videos and images
+          let nextIntervalTime;
+
+          if (currentMedia.type === 'video') {
+            // For video, we’ll set the interval in the video load handler
+            nextIntervalTime = currentMedia.duration || 10; // Fallback for videos if duration not available
+            console.log('Video interval time: ', nextIntervalTime);
+          } else if (currentMedia.type === 'image') {
+            // For images, use the specified interval
+            nextIntervalTime = intervalTime || 5; // efault interval for images is 5 seconds
+            console.log('Image interval time: ', nextIntervalTime);
+          } else {
+            console.log('NextInterval Time: ', nextIntervalTime);
+          }
+
+          // Reset the interval for the next media item
+          clearInterval(intervalIdRef.current);
+          intervalIdRef.current = setInterval(
+            handleMediaSwitch,
+            nextIntervalTime * 1000,
+          );
+
+          // If this is the first media, mark alls displayed after the loop completes
+          if (!allMediaDisplayed) {
+            setAllMediaDisplayed(newIndex === 0);
+          }
+
+          return newIndex;
+        });
+      };
+
+      // Start the loop with the first media's interval time
+      const initialMedia = mediaData[0];
+      let initialIntervalTime =
+        initialMedia.type === 'video'
+          ? initialMedia.duration || 10 // Us video duration or 10 seconds for video
+          : intervalTime || 5; // Default image interval is 5 seconds
+
+      intervalIdRef.current = setInterval(
+        handleMediaSwitch,
+        initialIntervalTime * 1000,
+      );
     }
   }, [mediaData, isModalVisible, intervalTime, allMediaDisplayed]);
 
@@ -305,14 +342,14 @@ const MediaComponent = ({navigation}) => {
     if (mediaData.length > 0) {
       animateTransition();
     }
-  }, [animateTransition, currentIndex, mediaData.length]);
-
+  }, [animateTransition, currentIndex, intervalTime, mediaData.length]);
   const animateTransition = useCallback(() => {
     animatedValue.setValue(0);
     Animated.timing(animatedValue, {
       toValue: 1,
-      duration: 500,
+      duration: 60,
       useNativeDriver: true,
+      easing: Easing.inOut(Easing.ease),
     }).start();
   }, [animatedValue]);
 
@@ -396,7 +433,7 @@ const MediaComponent = ({navigation}) => {
               key={currentMedia.path}
               source={{uri: `file://${currentMedia.path}`}}
               style={[styles.image]}
-              resizeMode="contain"
+              resizeMode="stretch"
               onPress={() => setIsModalVisible(true)}
             />
           </AnimatedTouchable>
@@ -407,7 +444,7 @@ const MediaComponent = ({navigation}) => {
             <Video
               source={{uri: currentMedia.path}}
               style={styles.media}
-              resizeMode="cover"
+              resizeMode="stretch"
               onLoad={videoLoadHandler}
               ref={videoRef}
               repeat={true} //r This will loop the video
@@ -437,21 +474,19 @@ const MediaComponent = ({navigation}) => {
 
   const videoLoadHandler = details => {
     const {duration} = details;
-    console.log('video duration: ', duration);
 
     if (mediaData.length === 1 && mediaData[0].type === 'video') {
       // If only one video, set the interval based on video length
-
       clearInterval(intervalIdRef.current);
       intervalIdRef.current = setInterval(() => {
         videoRef.current?.seek(0); // Restart the video
       }, duration * 1000); // Using video duration in milliseconds
     } else {
-      // Regular case: use the duration from the `intervalTime` state
+      // Regular case: use the duration from the video or interval time
       clearInterval(intervalIdRef.current);
       intervalIdRef.current = setInterval(() => {
         setCurrentIndex(prevIndex => (prevIndex + 1) % mediaData.length);
-      }, parseInt(duration, 10) * 1000);
+      }, duration * 1000); // Use video duration for interval
     }
   };
 
@@ -468,7 +503,9 @@ const MediaComponent = ({navigation}) => {
     );
     await AsyncStorage.setItem('mergeContain', merge.toString());
 
-    startMediaLoop();
+    setTimeout(() => {
+      Restart.Restart();
+    }, 500);
   };
 
   useEffect(() => {
@@ -482,11 +519,12 @@ const MediaComponent = ({navigation}) => {
 
   useEffect(() => {
     startMediaLoop(); // Restart the loop with the new interval time
-    return () => stopMediaLoop(); // Cleanup the interval on unmount or before restarting
+    return () => stopMediaLoop(); // Cleanup the interval on unmount
   }, [intervalTime, mediaData, startMediaLoop]);
 
   return (
     <View style={styles.container}>
+      <StatusBar hidden />
       {renderMedia()}
       {showScrollingText && (
         <View style={styles.containerTicker}>
@@ -498,13 +536,13 @@ const MediaComponent = ({navigation}) => {
                   {
                     translateX: animatedValue.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [screenWidth, -textLength],
+                      outputRange: [screenWidth, -screenWidth],
                     }),
                   },
                 ],
               },
             ]}>
-            <Text
+            <Animated.Text
               style={styles.tickerText}
               onLayout={event => {
                 if (textLength === 0) {
@@ -512,7 +550,7 @@ const MediaComponent = ({navigation}) => {
                 }
               }}>
               {textFromFile}
-            </Text>
+            </Animated.Text>
           </Animated.View>
         </View>
       )}
@@ -631,6 +669,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'black',
   },
   containerTicker: {
     position: 'absolute',
@@ -651,6 +690,7 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
+    backgroundColor: 'transparent',
   },
   backgroundVideo: {
     width: '100%',

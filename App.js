@@ -71,7 +71,6 @@ const App = () => {
       try {
         // Read the contents of the directory initially
         const files = await RNFS.readDir(`${signageFolderPath}/image/`);
-        console.log('files hello: ', files);
         const video = await RNFS.readDir(`${signageFolderPath}/video/`);
         const audio = await RNFS.readDir(`${signageFolderPath}/audio/`);
         const ticker = await RNFS.readDir(`${signageFolderPath}/ticker/`);
@@ -90,17 +89,6 @@ const App = () => {
             );
             const tickerFiles = await RNFS.readDir(
               `${signageFolderPath}/ticker/`,
-            );
-
-            const hello = imageFiles.length !== files.length;
-            const hello2 = videoFiles.length !== video.length;
-            console.log('hello is : ', imageFiles.length, files.length, hello);
-
-            console.log(
-              'hello2 is : ',
-              videoFiles.length,
-              video.length,
-              hello2,
             );
 
             // Compare the updated files with the previous ones
@@ -309,9 +297,9 @@ const App = () => {
         const destinationPath = `${RNFS.ExternalDirectoryPath}/signage`;
         console.log('desitinationPath: ', destinationPath);
         const sourceExists = await RNFS.exists(sourcePath);
-        // if (!sourceExists) {
-        //   return;
-        // }
+        if (!sourceExists) {
+          return;
+        }
 
         await RNFS.mkdir(destinationPath);
 
@@ -337,14 +325,19 @@ const App = () => {
   );
 
   const copyRecursive = useCallback(async (source, destination) => {
-    console.log(`${source} =sdf> ${destination}`);
+    console.log(`${source} => ${destination}`);
 
     const destinationExists = await RNFS.exists(destination);
-    const mergeContain = await AsyncStorage.getItem('mergeContain');
+    let mergeContain = await AsyncStorage.getItem('mergeContain');
+
+    // Convert the mergeContain to a boolean if it isn't already
+    mergeContain = mergeContain === 'true';
 
     if (destinationExists && !mergeContain) {
       console.log(`Deleting existing destination folder: ${destination}`);
-      await RNFS.unlink(destination).catch(() => {});
+      await RNFS.unlink(destination).catch(error => {
+        console.error(`Error deleting destination folder: ${error}`);
+      });
     }
 
     await RNFS.mkdir(destination);
