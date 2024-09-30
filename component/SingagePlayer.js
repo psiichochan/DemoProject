@@ -330,7 +330,7 @@ const MediaComponent = ({navigation}) => {
         initialIntervalTime * 1000,
       );
     }
-  }, [mediaData, isModalVisible, intervalTime, allMediaDisplayed]);
+  }, [mediaData, isModalVisible, allMediaDisplayed]);
 
   // Ensure to call stopMediaLoop when needed
   const stopMediaLoop = () => {
