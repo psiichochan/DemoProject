@@ -13,7 +13,6 @@ import {
   TouchableWithoutFeedback,
   Easing,
   StatusBar,
-  Image,
 } from 'react-native';
 import RNFS from 'react-native-fs';
 import Restart from 'react-native-restart';
@@ -291,13 +290,14 @@ const MediaComponent = ({navigation}) => {
 
           if (currentMedia.type === 'video') {
             // For video, we’ll set the interval in the video load handler
-            nextIntervalTime = currentMedia.duration || 10; // Fallback for videos if duration not available
-            console.log('Video interval time: ', nextIntervalTime);
+            nextIntervalTime = 10; // Fallback for videos if duration not available
+            // console.log('Video interval time: ', nextIntervalTime);
           } else if (currentMedia.type === 'image') {
             // For images, use the specified interval
-            nextIntervalTime = intervalTime || 5; // efault interval for images is 5 seconds
+            nextIntervalTime = 5; // efault  for images is 5 seconds
+            // console.log('Image interval time: ', nextIntervalTime);
           } else {
-            console.log('NextInterval Time: ', nextIntervalTime);
+            // console.log('NextInterval Time: ', nextIntervalTime);
           }
 
           // Reset the interval for the next media item
@@ -320,8 +320,10 @@ const MediaComponent = ({navigation}) => {
       const initialMedia = mediaData[0];
       let initialIntervalTime =
         initialMedia.type === 'video'
-          ? initialMedia.duration || 10 // Us video duration or 10 seconds for video
-          : intervalTime || 5; // Default image interval is 5 seconds
+          ? 10 // Us video duration or 10 seconds for video
+          : 5; // Default image interval is 5 seconds
+
+      console.log('InitialINterval*************** time: ', initialIntervalTime);
 
       intervalIdRef.current = setInterval(
         handleMediaSwitch,

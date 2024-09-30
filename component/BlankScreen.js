@@ -1,4 +1,4 @@
-/* eslint-disable prettier/prettier */
+/* eslint-disable react-native/no-inline-styles */ /* eslint-disable prettier/prettier */
 import React, {useEffect, useState} from 'react';
 import {View, Text, StyleSheet} from 'react-native';
 import DeviceInfo from 'react-native-device-info';

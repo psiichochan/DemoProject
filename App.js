@@ -275,7 +275,7 @@ const App = () => {
       const usbListener = usbEvents.addListener(
         'USBConnected',
         async connectedUsbPath => {
-          console.log('Pendrive is connected>>>>>>>>>>');
+          console.log('Pendrive is connected>>>>>>>>>');
           await copyFolderFromUsb(connectedUsbPath);
         },
       );
