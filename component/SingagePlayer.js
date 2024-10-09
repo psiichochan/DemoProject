@@ -40,7 +40,7 @@ const MediaComponent = ({navigation}) => {
   const [merge, setMerge] = useState(false);
   const screenWidth = Dimensions.get('window').width;
   const screenHeight = Dimensions.get('window').height;
-
+  const [videoDuration, setVideoDuration] = useState(0);
   const [modalClicked, setModalClicked] = useState(false);
   const [textFromFile, setTextFromFile] = useState('');
   const [ipAddress, setIpAddress] = useState('');
@@ -117,10 +117,12 @@ const MediaComponent = ({navigation}) => {
       if (mediaData.length === 1 && mediaData[0].type === 'video') {
         videoRef.current?.seek(0);
       } else {
-        startMediaLoop(intervalTime);
+        if (mediaData[currentIndex].type === 'image') {
+          startMediaLoop(intervalTime);
+        }
       }
     }
-  }, [mediaData, intervalTime, navigation, startMediaLoop]);
+  }, [mediaData, intervalTime, navigation, startMediaLoop, currentIndex]);
 
   useEffect(() => {
     const handleAppStart = async () => {
@@ -132,6 +134,8 @@ const MediaComponent = ({navigation}) => {
       const heypublic = heyThere === 'true';
       setShowScrollingText(how);
       setMerge(heypublic);
+
+      console.log('is: ', heyThere);
 
       const initialIntervalTime = savedIntervalTime || '5';
       const initialScrollSpeed = savedScrollSpeed || '10'; // Set default scrolling speed to 10 seconds
@@ -277,7 +281,7 @@ const MediaComponent = ({navigation}) => {
 
   const startMediaLoop = useCallback(() => {
     if (mediaData.length > 0 && !isModalVisible) {
-      // Clear any existing interval
+      // Clear any existing timeout
       stopMediaLoop();
 
       const handleMediaSwitch = () => {
@@ -285,57 +289,58 @@ const MediaComponent = ({navigation}) => {
           const newIndex = (prevIndex + 1) % mediaData.length;
           const currentMedia = mediaData[newIndex];
 
-          // Handle interval for videos and images
+          // Determine next interval time based on media type
           let nextIntervalTime;
 
           if (currentMedia.type === 'video') {
-            // For video, we’ll set the interval in the video load handler
-            nextIntervalTime = 10; // Fallback for videos if duration not available
-            // console.log('Video interval time: ', nextIntervalTime);
+            // For videos, set interval once video is loaded
+            nextIntervalTime = currentMedia.duration || 10; // Use video duration or fallback
+            console.log('Video interval time:', nextIntervalTime);
           } else if (currentMedia.type === 'image') {
-            // For images, use the specified interval
-            nextIntervalTime = 5; // efault  for images is 5 seconds
-            // console.log('Image interval time: ', nextIntervalTime);
-          } else {
-            // console.log('NextInterval Time: ', nextIntervalTime);
+            // For images, use the interval time
+            nextIntervalTime = intervalTime || 5; // Default to 5 seconds for images
+            console.log('Image interval time:', nextIntervalTime);
           }
 
-          // Reset the interval for the next media item
-          clearInterval(intervalIdRef.current);
-          intervalIdRef.current = setInterval(
+          if (!allMediaDisplayed && newIndex === 0) {
+            setAllMediaDisplayed(true);
+          }
+          console.log('htis isfakfjak**************: ', allMediaDisplayed);
+          // Set the next timeout based on media type
+          intervalIdRef.current = setTimeout(
             handleMediaSwitch,
             nextIntervalTime * 1000,
           );
 
-          // If this is the first media, mark alls displayed after the loop completes
-          if (!allMediaDisplayed) {
-            setAllMediaDisplayed(newIndex === 0);
-          }
+          // If looping back to the first item, mark all media as displayed
 
           return newIndex;
         });
       };
 
-      // Start the loop with the first media's interval time
+      // Start loop with the first media item
       const initialMedia = mediaData[0];
       let initialIntervalTime =
         initialMedia.type === 'video'
-          ? 10 // Us video duration or 10 seconds for video
-          : 5; // Default image interval is 5 seconds
+          ? videoDuration || 10 // Video duration or fallback
+          : intervalTime || 5; // Default for images
 
-      console.log('InitialINterval*************** time: ', initialIntervalTime);
-
-      intervalIdRef.current = setInterval(
+      intervalIdRef.current = setTimeout(
         handleMediaSwitch,
         initialIntervalTime * 1000,
       );
     }
-  }, [mediaData, isModalVisible, allMediaDisplayed]);
-
+  }, [
+    mediaData,
+    isModalVisible,
+    videoDuration,
+    intervalTime,
+    allMediaDisplayed,
+  ]);
   // Ensure to call stopMediaLoop when needed
   const stopMediaLoop = () => {
     if (intervalIdRef.current) {
-      clearInterval(intervalIdRef.current);
+      clearTimeout(intervalIdRef.current);
     }
   };
 
@@ -475,22 +480,29 @@ const MediaComponent = ({navigation}) => {
 
   const videoLoadHandler = details => {
     const {duration} = details;
+    setVideoDuration(duration);
 
     if (mediaData.length === 1 && mediaData[0].type === 'video') {
       // If only one video, set the interval based on video length
       clearInterval(intervalIdRef.current);
-      intervalIdRef.current = setInterval(() => {
+      intervalIdRef.current = setTimeout(() => {
         videoRef.current?.seek(0); // Restart the video
       }, duration * 1000); // Using video duration in milliseconds
     } else {
       // Regular case: use the duration from the video or interval time
       clearInterval(intervalIdRef.current);
-      intervalIdRef.current = setInterval(() => {
-        setCurrentIndex(prevIndex => (prevIndex + 1) % mediaData.length);
-      }, duration * 1000); // Use video duration for interval
+      const currentMedia = mediaData[currentIndex];
+      if (currentMedia.type === 'video') {
+        intervalIdRef.current = setTimeout(() => {
+          setCurrentIndex(prevIndex => (prevIndex + 1) % mediaData.length);
+        }, duration * 1000); // Use video duration for interval
+      } else if (currentMedia.type === 'image') {
+        intervalIdRef.current = setTimeout(() => {
+          setCurrentIndex(prevIndex => (prevIndex + 1) % mediaData.length);
+        }, intervalTime * 1000); // Use interval time for images
+      }
     }
   };
-
   const handleSaveIntervalTime = async () => {
     setIsModalVisible(false);
     setModalClicked(true);
@@ -503,6 +515,8 @@ const MediaComponent = ({navigation}) => {
       showScrollingText.toString(),
     );
     await AsyncStorage.setItem('mergeContain', merge.toString());
+
+    console.log('this is merge Contain: ', merge);
 
     setTimeout(() => {
       Restart.Restart();
