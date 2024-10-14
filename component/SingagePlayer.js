@@ -13,10 +13,11 @@ import {
   TouchableWithoutFeedback,
   Easing,
   StatusBar,
+  Image,
 } from 'react-native';
+import CustomCheckBox from './CustomCheckBox'; // Adjust the path if necessary
 import RNFS from 'react-native-fs';
 import Restart from 'react-native-restart';
-import CheckBox from 'react-native-checkbox';
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
@@ -29,8 +30,8 @@ import NetInfo from '@react-native-community/netinfo';
 
 const MediaComponent = ({navigation}) => {
   const [mediaData, setMediaData] = useState([]);
+  const [isPaused, setIsPaused] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [allMediaDisplayed, setAllMediaDisplayed] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [intervalTime, setIntervalTime] = useState();
   const [permissionsGranted, setPermissionGranted] = useState(false);
@@ -40,7 +41,6 @@ const MediaComponent = ({navigation}) => {
   const [merge, setMerge] = useState(false);
   const screenWidth = Dimensions.get('window').width;
   const screenHeight = Dimensions.get('window').height;
-  const [videoDuration, setVideoDuration] = useState(0);
   const [modalClicked, setModalClicked] = useState(false);
   const [textFromFile, setTextFromFile] = useState('');
   const [ipAddress, setIpAddress] = useState('');
@@ -48,8 +48,9 @@ const MediaComponent = ({navigation}) => {
   const [selectAnimation, setSelectAnimation] = useState('right');
   const intervalIdRef = useRef(null);
   const videoRef = useRef(null);
-  const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+  const [tickerAnimatedValue] = useState(new Animated.Value(0));
   const [animationRestart, setSelectedAnimationRestart] = useState('');
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   useEffect(() => {
     const fetchIpAddress = async () => {
@@ -118,11 +119,10 @@ const MediaComponent = ({navigation}) => {
         videoRef.current?.seek(0);
       } else {
         if (mediaData[currentIndex].type === 'image') {
-          startMediaLoop(intervalTime);
         }
       }
     }
-  }, [mediaData, intervalTime, navigation, startMediaLoop, currentIndex]);
+  }, [mediaData, intervalTime, navigation, currentIndex]);
 
   useEffect(() => {
     const handleAppStart = async () => {
@@ -135,18 +135,14 @@ const MediaComponent = ({navigation}) => {
       setShowScrollingText(how);
       setMerge(heypublic);
 
-      console.log('is: ', heyThere);
-
       const initialIntervalTime = savedIntervalTime || '5';
       const initialScrollSpeed = savedScrollSpeed || '10'; // Set default scrolling speed to 10 seconds
-      console.log('initialInterValTIme: ', savedIntervalTime);
       setIntervalTime(initialIntervalTime);
       setScrollSpeed(initialScrollSpeed); // Set the scrolling speed
-      startMediaLoop(initialIntervalTime);
     };
 
     handleAppStart();
-  }, [modalClicked, startMediaLoop]);
+  }, [modalClicked]);
 
   const readTextFromFile = useCallback(async () => {
     try {
@@ -169,26 +165,50 @@ const MediaComponent = ({navigation}) => {
     }
   }, [textFromFile]);
 
-  const animateText = useCallback(() => {
-    try {
-      if (showScrollingText) {
-        Animated.loop(
-          Animated.timing(animatedValue, {
-            toValue: 1,
-            duration: parseInt(scrollSpeed, 10) * 1000, // Correctly using scrollSpeed for duration
-            useNativeDriver: true,
-            easing: Easing.linear, // Ensure the scroll is smooth
-          }),
-        ).start();
-      }
-    } catch (error) {
-      console.error('An error occurred:', error);
-    }
-  }, [animatedValue, scrollSpeed, showScrollingText]);
-
   useEffect(() => {
-    animateText();
-  }, [scrollSpeed, textFromFile, showScrollingText, animateText]);
+    if (showScrollingText && textFromFile) {
+      const startTickerAnimation = () => {
+        tickerAnimatedValue.setValue(0);
+        Animated.timing(tickerAnimatedValue, {
+          toValue: 1,
+          duration: parseInt(scrollSpeed, 10) * 1000, // Convert to milliseconds
+          useNativeDriver: true,
+          easing: Easing.linear,
+        }).start(({finished}) => {
+          if (finished) {
+            startTickerAnimation(); // Restart the animation when it finishes
+          }
+        });
+      };
+
+      startTickerAnimation();
+
+      return () => {
+        tickerAnimatedValue.stopAnimation();
+      };
+    }
+  }, [showScrollingText, textFromFile, scrollSpeed, tickerAnimatedValue]);
+
+  // const animateText = useCallback(() => {
+  //   try {
+  //     if (showScrollingText) {
+  //       Animated.loop(
+  //         Animated.timing(animatedValue, {
+  //           toValue: 1,
+  //           duration: parseInt(scrollSpeed, 10) * 1000, // Correctly using scrollSpeed for duration
+  //           useNativeDriver: true,
+  //           easing: Easing.linear, // Ensure the scroll is smooth
+  //         }),
+  //       ).start();
+  //     }
+  //   } catch (error) {
+  //     console.error('An error occurred:', error);
+  //   }
+  // }, [animatedValue, scrollSpeed, showScrollingText]);
+
+  // useEffect(() => {
+  //   animateText();
+  // }, [scrollSpeed, textFromFile, showScrollingText, animateText]);
 
   const requestStoragePermission = async () => {
     try {
@@ -279,84 +299,80 @@ const MediaComponent = ({navigation}) => {
     }
   };
 
-  const startMediaLoop = useCallback(() => {
-    if (mediaData.length > 0 && !isModalVisible) {
-      // Clear any existing timeout
+  useEffect(() => {
+    const preloadImages = async () => {
+      if (mediaData.length > 0) {
+        const imagePromises = mediaData
+          .filter(media => media.type === 'image')
+          .map(media => Image.prefetch(`file://${media.path}`));
+        await Promise.all(imagePromises);
+      }
+    };
+
+    preloadImages();
+  }, [mediaData]);
+  useEffect(() => {
+    if (mediaData.length > 0 && !isModalVisible && !isPaused) {
       stopMediaLoop();
 
       const handleMediaSwitch = () => {
         setCurrentIndex(prevIndex => {
           const newIndex = (prevIndex + 1) % mediaData.length;
-          const currentMedia = mediaData[newIndex];
+          const nextMedia = mediaData[newIndex];
 
-          // Determine next interval time based on media type
-          let nextIntervalTime;
-
-          if (currentMedia.type === 'video') {
-            // For videos, set interval once video is loaded
-            nextIntervalTime = currentMedia.duration || 10; // Use video duration or fallback
-            console.log('Video interval time:', nextIntervalTime);
-          } else if (currentMedia.type === 'image') {
-            // For images, use the interval time
-            nextIntervalTime = intervalTime || 5; // Default to 5 seconds for images
-            console.log('Image interval time:', nextIntervalTime);
+          if (nextMedia.type === 'video') {
+            return newIndex;
+          } else {
+            intervalIdRef.current = setTimeout(
+              handleMediaSwitch,
+              (intervalTime || 5) * 1000,
+            );
+            return newIndex;
           }
-
-          if (!allMediaDisplayed && newIndex === 0) {
-            setAllMediaDisplayed(true);
-          }
-          console.log('htis isfakfjak**************: ', allMediaDisplayed);
-          // Set the next timeout based on media type
-          intervalIdRef.current = setTimeout(
-            handleMediaSwitch,
-            nextIntervalTime * 1000,
-          );
-
-          // If looping back to the first item, mark all media as displayed
-
-          return newIndex;
         });
       };
 
-      // Start loop with the first media item
-      const initialMedia = mediaData[0];
-      let initialIntervalTime =
-        initialMedia.type === 'video'
-          ? videoDuration || 10 // Video duration or fallback
-          : intervalTime || 5; // Default for images
-
-      intervalIdRef.current = setTimeout(
-        handleMediaSwitch,
-        initialIntervalTime * 1000,
-      );
+      const currentMedia = mediaData[currentIndex];
+      if (currentMedia.type === 'image') {
+        intervalIdRef.current = setTimeout(
+          handleMediaSwitch,
+          (intervalTime || 5) * 1000,
+        );
+      }
     }
+
+    return stopMediaLoop;
   }, [
     mediaData,
     isModalVisible,
-    videoDuration,
     intervalTime,
-    allMediaDisplayed,
+    currentIndex,
+    animateTransition,
+    isPaused,
   ]);
-  // Ensure to call stopMediaLoop when needed
   const stopMediaLoop = () => {
     if (intervalIdRef.current) {
       clearTimeout(intervalIdRef.current);
     }
   };
-
   useEffect(() => {
     if (mediaData.length > 0) {
       animateTransition();
     }
-  }, [animateTransition, currentIndex, intervalTime, mediaData.length]);
+  }, [animateTransition, currentIndex, mediaData.length]);
   const animateTransition = useCallback(() => {
+    setIsTransitioning(true);
     animatedValue.setValue(0);
     Animated.timing(animatedValue, {
       toValue: 1,
-      duration: 60,
+      duration: 80,
       useNativeDriver: true,
       easing: Easing.inOut(Easing.ease),
-    }).start();
+    }).start(({finished}) => {
+      if (finished) {
+        setIsTransitioning(false);
+      }
+    });
   }, [animatedValue]);
 
   const getAnimationStyle = () => {
@@ -427,46 +443,46 @@ const MediaComponent = ({navigation}) => {
     }
   };
 
+  // useEffect(() => {
+  //   if (mediaData.length > 0 && !isAnimating) {
+  //     animateTransition();
+  //   }
+  // }, [animateTransition, currentIndex, mediaData.length, isAnimating]);
+
   const renderMedia = () => {
     const currentMedia = mediaData[currentIndex];
     if (currentMedia) {
-      if (currentMedia.type === 'image') {
-        return (
-          <AnimatedTouchable
-            style={[styles.mediaContainer, getAnimationStyle()]}
-            onPress={() => setIsModalVisible(true)}>
-            <Animated.Image
-              key={currentMedia.path}
-              source={{uri: `file://${currentMedia.path}`}}
-              style={[styles.image]}
-              resizeMode="stretch"
-              onPress={() => setIsModalVisible(true)}
-            />
-          </AnimatedTouchable>
-        );
-      } else if (currentMedia.type === 'video') {
-        return (
+      return (
+        <Animated.View style={[styles.mediaContainer, getAnimationStyle()]}>
           <TouchableWithoutFeedback onPress={handleMediaClick}>
-            <Video
-              source={{uri: currentMedia.path}}
-              style={styles.media}
-              resizeMode="stretch"
-              onLoad={videoLoadHandler}
-              ref={videoRef}
-              repeat={true} //r This will loop the video
-              onEnd={() => {
-                if (mediaData.length === 1) {
-                  videoRef.current?.seek(0); // Seek to the start if only one video
-                } else {
-                  setCurrentIndex(
-                    prevIndex => (prevIndex + 1) % mediaData.length,
-                  );
-                }
-              }}
-            />
+            {currentMedia.type === 'image' ? (
+              <Image
+                key={currentMedia.path}
+                source={{uri: `file://${currentMedia.path}`}}
+                style={styles.image}
+                resizeMode="stretch"
+              />
+            ) : (
+              <Video
+                source={{uri: currentMedia.path}}
+                style={styles.media}
+                resizeMode="stretch"
+                onLoad={videoLoadHandler}
+                repeat={mediaData.length === 1}
+                paused={isPaused || isModalVisible}
+                onEnd={() => {
+                  if (mediaData.length > 1 && !isPaused && !isModalVisible) {
+                    setCurrentIndex(
+                      prevIndex => (prevIndex + 1) % mediaData.length,
+                    );
+                    animateTransition();
+                  }
+                }}
+              />
+            )}
           </TouchableWithoutFeedback>
-        );
-      }
+        </Animated.View>
+      );
     } else {
       console.log('No media found.');
       return null;
@@ -475,32 +491,18 @@ const MediaComponent = ({navigation}) => {
 
   const handleMediaClick = () => {
     setIsModalVisible(true);
+    setIsPaused(true);
     stopMediaLoop();
   };
 
   const videoLoadHandler = details => {
     const {duration} = details;
-    setVideoDuration(duration);
 
     if (mediaData.length === 1 && mediaData[0].type === 'video') {
-      // If only one video, set the interval based on video length
-      clearInterval(intervalIdRef.current);
+      clearTimeout(intervalIdRef.current);
       intervalIdRef.current = setTimeout(() => {
-        videoRef.current?.seek(0); // Restart the video
-      }, duration * 1000); // Using video duration in milliseconds
-    } else {
-      // Regular case: use the duration from the video or interval time
-      clearInterval(intervalIdRef.current);
-      const currentMedia = mediaData[currentIndex];
-      if (currentMedia.type === 'video') {
-        intervalIdRef.current = setTimeout(() => {
-          setCurrentIndex(prevIndex => (prevIndex + 1) % mediaData.length);
-        }, duration * 1000); // Use video duration for interval
-      } else if (currentMedia.type === 'image') {
-        intervalIdRef.current = setTimeout(() => {
-          setCurrentIndex(prevIndex => (prevIndex + 1) % mediaData.length);
-        }, intervalTime * 1000); // Use interval time for images
-      }
+        setCurrentIndex(0); // This will effectively restart the video
+      }, duration * 1000);
     }
   };
   const handleSaveIntervalTime = async () => {
@@ -516,11 +518,8 @@ const MediaComponent = ({navigation}) => {
     );
     await AsyncStorage.setItem('mergeContain', merge.toString());
 
-    console.log('this is merge Contain: ', merge);
-
-    setTimeout(() => {
-      Restart.Restart();
-    }, 500);
+    // Restart the application
+    Restart.Restart();
   };
   useEffect(() => {
     const loadAnimationDirection = async () => {
@@ -543,13 +542,12 @@ const MediaComponent = ({navigation}) => {
 
   const handleModalClose = () => {
     setIsModalVisible(false);
-    startMediaLoop(intervalTime);
+    setIsPaused(false);
   };
 
   useEffect(() => {
-    startMediaLoop(); // Restart the loop with the new interval time
-    return () => stopMediaLoop(); // Cleanup the interval on unmount
-  }, [intervalTime, mediaData, startMediaLoop]);
+    return () => stopMediaLoop(); // Clear the interval when the component unmounts
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -563,23 +561,24 @@ const MediaComponent = ({navigation}) => {
               {
                 transform: [
                   {
-                    translateX: animatedValue.interpolate({
+                    translateX: tickerAnimatedValue.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [screenWidth, -screenWidth],
+                      outputRange: [
+                        Dimensions.get('window').width,
+                        -textLength,
+                      ],
                     }),
                   },
                 ],
               },
             ]}>
-            <Animated.Text
+            <Text
               style={styles.tickerText}
               onLayout={event => {
-                if (textLength === 0) {
-                  setTextLength(event.nativeEvent.layout.width);
-                }
+                setTextLength(event.nativeEvent.layout.width);
               }}>
               {textFromFile}
-            </Animated.Text>
+            </Text>
           </Animated.View>
         </View>
       )}
@@ -620,16 +619,17 @@ const MediaComponent = ({navigation}) => {
               </View>
               <View style={styles.modalRow}>
                 <Text style={styles.modalLabel}>Show Scrolling Text: </Text>
-                <CheckBox
+                <CustomCheckBox
                   style={styles.checkBox}
                   checked={showScrollingText}
-                  onChange={() => setShowScrollingText(!showScrollingText)}
+                  onChange={newValue => setShowScrollingText(newValue)}
+                  label=""
                 />
               </View>
 
               <View style={styles.modalRow}>
                 <Text style={styles.modalLabel}>Merge Contain: </Text>
-                <CheckBox
+                <CustomCheckBox
                   style={styles.checkBox}
                   checked={merge}
                   onChange={() => setMerge(!merge)}
@@ -703,18 +703,20 @@ const styles = StyleSheet.create({
   containerTicker: {
     position: 'absolute',
     bottom: 0,
-    backgroundColor: 'black',
-    width: '100%',
-    height: hp(4),
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    height: 30,
+    justifyContent: 'center',
   },
   tickerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: wp(2),
   },
   tickerText: {
     color: 'white',
-    fontSize: hp(2),
+    fontSize: 16,
+    // whiteSpace: 'nowrap',
   },
   image: {
     width: '100%',
