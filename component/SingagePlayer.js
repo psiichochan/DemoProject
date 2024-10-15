@@ -50,7 +50,6 @@ const MediaComponent = ({navigation}) => {
   const videoRef = useRef(null);
   const [tickerAnimatedValue] = useState(new Animated.Value(0));
   const [animationRestart, setSelectedAnimationRestart] = useState('');
-  const [isTransitioning, setIsTransitioning] = useState(false);
 
   useEffect(() => {
     const fetchIpAddress = async () => {
@@ -361,16 +360,14 @@ const MediaComponent = ({navigation}) => {
     }
   }, [animateTransition, currentIndex, mediaData.length]);
   const animateTransition = useCallback(() => {
-    setIsTransitioning(true);
     animatedValue.setValue(0);
     Animated.timing(animatedValue, {
       toValue: 1,
-      duration: 80,
+      duration: 50,
       useNativeDriver: true,
       easing: Easing.inOut(Easing.ease),
     }).start(({finished}) => {
       if (finished) {
-        setIsTransitioning(false);
       }
     });
   }, [animatedValue]);
